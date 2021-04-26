@@ -21,7 +21,7 @@ suppressMessages(library(kableExtra))
 cat('\nExtracting GPS data...\n\n')
 
 # Get all CSV files (containing GPS/ACC data)
-files = list.files("../Data/BIOT_DGBP/BIOT_DGBP/", pattern = "1.csv", full.names = T)
+files = list.files("../Data/BIOT_DGBP/BIOT_DGBP/", pattern = "1.csv", full.names = TRUE)
 data_list = list()
 
 # For each file, extract just location data and resave as *_loc.csv
@@ -32,6 +32,7 @@ for (i in 1:length(files)) {
   
   # Read in file and subset rows containing GPS data
   ts_data = fread(file = file)
+  #save(ts_data, file = gsub(".csv", ".RData", file)) # save RDA file for quicker loading later
   ts_data_loc = ts_data[!is.na(`location-lat`)]
   
   # Convert date and time to readable format
@@ -43,8 +44,7 @@ for (i in 1:length(files)) {
   ts_data_loc$dist_to_dg_km = ts_data_loc$dist_to_dg_m/1000
   
   # Initialise cols
-  ts_data_loc$dist_moved_m = 0 
-  ts_data_loc$time_diff_s = 0
+  ts_data_loc$dist_moved_m = ts_data_loc$time_diff_s = 0
   
   n = nrow(ts_data_loc)
   
@@ -107,17 +107,16 @@ g <- ggplot(eez.df, aes(x = long, y = lat, alpha = 0.01)) +
 print(g)
 ggsave(g, file="../Data/BIOT_DGBP/chagos_bp_redfoot_map.png", width = 9, height = 9)
 
+cat('\rSaving GPS plots for each bird...')
 
-## Speed plot
-cat('\rPlotting speed data...')
 birds = as.vector(unique(gps_data_df$TagID))
 for (i in 1:length(birds)) {
   this_bird = birds[i]
   g = ggplot(eez.df, aes(x = long, y = lat, alpha = 0.01)) + 
     geom_polygon() +
     #geom_polygon(data = chagos.df, aes(x = long, y = lat, color = "darkgreen")) + 
-    geom_point(data = subset(gps_data_df, TagID == this_bird), aes(x = `location-lon`, y = `location-lat`, group = TagID, color = TagID), size=0.5) +
-    geom_path(data = subset(gps_data_df, TagID == this_bird), aes(x = `location-lon`, y = `location-lat`, group = TagID), color = "black", size=0.5) +
+    geom_point(data = gps_data_df[TagID==this_bird], aes(x = `location-lon`, y = `location-lat`, group = TagID, color = TagID), size=0.5) +
+    geom_path(data = gps_data_df[TagID==this_bird], aes(x = `location-lon`, y = `location-lat`, group = TagID), color = "black", size=0.5) +
     coord_equal() +
     #geom_text(aes(x = -Inf, y = -Inf, label = max(dist_to_dg_m)), hjust   = -0.1, vjust   = -1) + 
     theme_bw() + 
@@ -125,6 +124,9 @@ for (i in 1:length(birds)) {
   #print(g)
   ggsave(g, file=paste0('../Data/BIOT_DGBP/', this_bird, "_plot.png"), width = 9, height = 9)
 }
+
+## Speed plot
+cat('\rPlotting speed data...')
 
 g = ggplot(subset(gps_data_df, calc_sp_ms < 20), aes(x=calc_sp_ms))+ 
       geom_histogram(binwidth=0.05) + 
@@ -134,7 +136,7 @@ g = ggplot(subset(gps_data_df, calc_sp_ms < 20), aes(x=calc_sp_ms))+
 
 ggsave(g, file="../Data/BIOT_DGBP/chagos_bp_redfoot_speed_plots.png", width = 9, height = 9)
 
-cat('\rWriting summary table...')
+cat('\rWriting summary table...\n')
 
 ## Summary table
 smry = ddply(gps_data_df, .(TagID), dplyr::summarise,
