@@ -110,35 +110,68 @@ for (i in 1:length(birds)) {
 }
 
 #//////////////////////////////////////////////////////////////////////////////
+options(rgl.useNULL = TRUE) # for Mac?
 library(rgl)
 library(RColorBrewer)
 library(leaflet)
 library(ggmap)
+library(data.table)
 
+
+d_data_df = fread(file = "../Data/BIOT_DGBP/all_d_data.csv")
+birds = unique(d_data_df$TagID)
 
 ## PLOT 3D ##
 
 idd <- 1
 location <- d_data_df[!is.na(`location-lat`) & TagID == birds[idd]]
-nrow(location)
+#set.seed(1)
+#rows <- sample(1:nrow(location), 10000)
+#sublocation <- location[rows,]
+#nrow(location)
 
-plot3d(location$`location-lat`, location$`location-lon`, location$Depth,
-       xlab = "Latitude", ylab = "Longitude", zlab = "Altitude",
-       col = brewer.pal(3, "Dark2"),size = 8)
+#options(rgl.printRglwidget = TRUE)
+#plot3d(location$`location-lat`, location$`location-lon`, -location$Depth,
+#       xlab = "Latitude", ylab = "Longitude", zlab = "Altitude",
+#       col = brewer.pal(3, "Dark2"),size = 8)
 
 ## LEAFLET ##
+pal <- colorNumeric(palette = "RdBu", domain = location$Depth)
 
-m <- leaflet() %>% 
-  addTiles(urlTemplate = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png") %>% 
-  addMarkers(lng = location$`location-lon`, lat = location$`location-lat`, popup = 'GPS tracking of birdie')
+m <- leaflet(data = location) %>% 
+  #addTiles() %>% 
+  addProviderTiles('Esri.WorldImagery') %>%
+  addCircleMarkers(lng = location$`location-lon`, 
+                   lat = location$`location-lat`, 
+                   color = ~pal(Depth), 
+                   radius = 1) %>% 
+  addPolylines(lng = location$`location-lon`, 
+               lat = location$`location-lat`, 
+               color = "black",
+               weight = 2,
+               opacity = .4) %>%
+  addLegend(position = "bottomright", pal = pal, values = location$Depth) %>%
+  addMarkers(lng = lons, lat = lats)
 
+m
+
+m1 <- leaflet() %>% 
+  addTiles() %>% 
+  addPolylines(lng = location$`location-lon`, 
+               lat = location$`location-lat`, 
+               color = "#03F",
+               weight = 5,
+               opacity = 0.5)
+
+m1  # Print the map
 
 ## GGMAP ##
 
 register_google(key = "AIzaSyCAYLkDYh-GyfOKxmSDzW_c7H7AvrdI1qQ")
-map = get_map(location = c(lon = 72.2, lat = -6.28275), zoom = 8, 
+map = get_map(location = c(lon = 74, lat = -6.28275), zoom = 8, 
               maptype = 'roadmap', source = "google")
-#71.87243
+
+# 71.87243
 library(grid)
 
 ggmap(map) + geom_point(data = location, alpha = 0.25, 
@@ -152,3 +185,93 @@ ggmap(map) + geom_point(data = location, alpha = 0.25,
         legend.text = element_text(size = 6),
         legend.title = element_text(size = 8, face = "plain"),
         panel.background = element_rect(fill='#D6E7EF'))
+
+
+
+#///////////////////////////////////////////////////////////////////////
+## Import data ##
+birds <- fread('../Data/BIOT_DGBP/all_gps_data.csv', header = TRUE)
+nrow(birds)
+
+## Plot GPS coords for each bird ##
+ids <- unique(birds$TagID)
+bird <- birds %>% filter(TagID == ids[2]) %>% select(`location-lat`, `location-lon`) %>% as_tibble()
+locations_sf <- st_as_sf(birds, coords = c("location-lon", "location-lat"), crs=4326)
+mapview(locations_sf)
+
+
+## GOOGLE ##
+register_google(key = "AIzaSyCAYLkDYh-GyfOKxmSDzW_c7H7AvrdI1qQ")
+#bw_map <- get_googlemap(center = c(71.86435, -5.35088), zoom = 11)
+bw_map <- get_googlemap(center = c(71.87243, -6.28275), zoom = 8)
+
+ggmap(bw_map) +
+  geom_point(data = birds, aes(x = lon, y = lat, col=id), cex=0.1, pch=3)
+
+
+
+library(mapdeck)
+
+set_token("pk.eyJ1IjoiY3l0b3MiLCJhIjoiSHBoWG5VQSJ9.hYFgp0rZwNLvbIff5puV8A")
+mapdeck(style = mapdeck_style("dark")) %>%
+  add_pointcloud(
+    data = combined_data
+    , lon = 'Longitude'
+    , lat = 'Latitude'
+    , layer_id = 'lpi'
+    , tooltip = "Binomial"
+    , palette = 'rdylbu'
+    , fill_colour = "Taxa"
+    , legend = TRUE
+    , radius = 5
+  )
+
+
+
+#////////////////////////// SANDBOX /////////////////////////
+g3 = ggplot(this_data_GPS, aes(x = datetime, y = Depth))  +  
+  geom_point()
+
+
+# this section should be run with this_data = subsetted depth data for a 
+# given bird, and the addMarkers line of the leaflet plot is unhashed and 
+# then run after this.
+lats = c()
+lons = c()
+idx.tmp = which(this_data$Depth>2.2) # grab indexes of all points deeper than 2.2
+for (i in 1:length(idx.tmp)){
+  q = idx.tmp[i]
+  tmp = this_data[(q-30):(q+30)] # grab section around to find nearest GPS point
+  gps.tmp = which(!is.na(tmp$`location-lat`))
+  if (length(gps.tmp)){
+    row = gps.tmp[1]
+    lats = c(lats, tmp[row,]$`location-lat`)
+    lons = c(lons, tmp[row,]$`location-lon`)
+  }
+}
+
+# WHERE THIS_DATA IS SUBSETTED DEPTH DATA FOR A SINGLE BIRD, ASSIGN DIVES
+# LIKE SO:
+
+# initialise new cols
+this_data$Dive = this_data$Max_depth_m = NA
+
+gps.idx = which(!is.na(this_data$`location-lat`))
+#length(gps.idx)
+
+threshold = 2.2
+
+deepest = sapply(gps.idx, function(i) max(this_data$Depth[(i-30):(i+30)]))
+deepest[is.na(deepest)] = 0 # last value will be NA as there aren't 30 rows past it
+dives = sapply(deepest, function(x) x>threshold)
+
+# Load into new cols
+this_data$Max_depth_m[gps.idx] = deepest
+this_data$Dive[gps.idx] = dives
+
+
+min(sumsts)
+max(sumsts)
+mean(sumsts)
+
+
