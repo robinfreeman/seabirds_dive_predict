@@ -105,7 +105,7 @@ g <- ggplot(eez.df, aes(x = long, y = lat, alpha = 0.01)) +
   theme(panel.background = element_rect(fill = "lightblue"), legend.position = "none", text = element_text(size=10))
 
 print(g)
-ggsave(g, file="../Data/BIOT_DGBP/chagos_bp_redfoot_map.png", width = 9, height = 9)
+ggsave(g, file="../Plots/chagos_bp_redfoot_map.png", width = 9, height = 9)
 
 cat('\rSaving GPS plots for each bird...')
 
@@ -122,7 +122,7 @@ for (i in 1:length(birds)) {
     theme_bw() + 
     theme(panel.background = element_rect(fill = "lightblue"), legend.position = "none")
   #print(g)
-  ggsave(g, file=paste0('../Data/BIOT_DGBP/', this_bird, "_plot.png"), width = 9, height = 9)
+  ggsave(g, file=paste0('../Plots/', this_bird, "_plot.png"), width = 9, height = 9)
 }
 
 ## Speed plot
@@ -134,7 +134,7 @@ g = ggplot(subset(gps_data_df, calc_sp_ms < 20), aes(x=calc_sp_ms))+
       facet_wrap(~TagID) + 
       theme(text = element_text(size=10), axis.text.x = element_text(angle=90, hjust=1))
 
-ggsave(g, file="../Data/BIOT_DGBP/chagos_bp_redfoot_speed_plots.png", width = 9, height = 9)
+ggsave(g, file="../Plots/chagos_bp_redfoot_speed_plots.png", width = 9, height = 9)
 
 cat('\rWriting summary table...\n')
 
