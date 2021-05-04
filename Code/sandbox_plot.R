@@ -136,8 +136,9 @@ ggmap(bw_map) +
 
 library(mapdeck)
 
-set_token("sk.eyJ1IjoibGRzd2FieSIsImEiOiJja28ycTRpY3Qwa3h5Mm5xOTRvbGs0aG0zIn0.aQaEpoi55TYn-iGzM9185Q")
-mapdeck(data = loc_data, style = mapdeck_style("dark")) %>%
+#set_token("sk.eyJ1IjoibGRzd2FieSIsImEiOiJja28ycTRpY3Qwa3h5Mm5xOTRvbGs0aG0zIn0.aQaEpoi55TYn-iGzM9185Q")
+set_token("pk.eyJ1IjoibGRzd2FieSIsImEiOiJja28ycHp4NXQwMnFuMndvMDNsMGk1YjljIn0.N_KnEPytCe44O1677FQrzw")
+m1 <- mapdeck(data = loc_data2, style = mapdeck_style("dark")) %>%
   add_pointcloud(
     data = loc_data
     , lon = 'location-lon'
@@ -149,6 +150,9 @@ mapdeck(data = loc_data, style = mapdeck_style("dark")) %>%
     , legend = TRUE
     , radius = 5
   )
+m1
+
+mapshot(m1, file = '../Plots/mapdeck.png')
 
 
 
@@ -194,35 +198,23 @@ this_data$Max_depth_m[gps.idx] = deepest
 this_data$Dive[gps.idx] = dives
 
 
-min(sumsts)
-max(sumsts)
-mean(sumsts)
 
 
-idents = c()
-for (i in 1:ncol(loc_data)){
-  subset(dt, select = c(x1, x3))
-  idents = c(idents, identical(poo[, i], location[, i]))
-}
-
-
-wdw <- 15
-# For gps
-tst2 <- sapply(gps_idx, function(ix, w=wdw) list(X = ts_data_d$X[(ix-w):(ix+w)], Y = ts_data_d$Y[(ix-w):(ix+w)], Z = ts_data_d$Z[(ix-w):(ix+w)], Dive = ts_data_d$Dive[ix]))
-# For depth
-samp = ts_data_d[1:15950]
-
+############## CREATING ACCELERATION DEEP LEARNING DATA SET #################
+#window.size = 25*30
 atm = proc.time()
-window.size <- 25*30
-idx_range <- (window.size+1):(nrow(ts_data_d)-window.size)
-tst <- sapply(idx_range, function(ix, w=window.size) {
-  X = ts_data_d$X[(ix-w):(ix+w)]
-  Y = ts_data_d$Y[(ix-w):(ix+w)]
-  Z = ts_data_d$Z[(ix-w):(ix+w)]
-  dive = ts_data_d$Depth[ix]>0.5
+#idx_range = (window.size+1):(nrow(ts_data)-window.size)
+idx_range = head(which(!is.na(ts_data$Depth)), -1)[-1] # removes first and last index of depth rows
+tst = sapply(idx_range, function(ix, wdw=25, thrshold=0.5) {
+  X = ts_data$X[(ix-wdw):(ix+wdw)]
+  Y = ts_data$Y[(ix-wdw):(ix+wdw)]
+  Z = ts_data$Z[(ix-wdw):(ix+wdw)]
+  dive = ts_data$Depth[ix]>thrshold
   return(c(X,Y,Z,dive))
 })
+fwrite(tst, file = "../Data/BIOT_DGBP/ACCELERATION_ML_DATASET.csv")
 proc.time() - atm
+############################################################################
 
 
 
@@ -259,12 +251,15 @@ steps = floor(diffs[gaps]/30)
 # 3. Find hypothetical indexes to interpolate at
 int_ix = apply(cbind(starts,steps), 1, function(v) seq(v[1], v[1]+v[2]*30, 30))
 # 4. Add these indexes to gps_index (maybe a new vector)
-for (i in 1:length(int_ix)){
-  ins = int_ix[[i]]
-  strt = which(gps_idx2==ins[1])
-  gps_idx2 = append(gps_idx2, ins, strt)[-strt]
-}
-gps_idx2 = unique(gps_idx2) # drop duplicates
+#for (i in 1:length(int_ix)){
+#  ins = int_ix[[i]]
+#  strt = which(gps_idx2==ins[1])
+#  gps_idx2 = append(gps_idx2, ins, strt)[-strt]
+#}
+#gps_idx2 = unique(gps_idx2) # drop duplicates
+
+## OR:
+gps_idx2 = sort(unique(c(unlist(int_ix), gps_idx2)))
 #### CHECK ####
 #all(diff(gps_idx) > 0) #=> TRUE
 #all(diff(gps_idx2) > 0) #=> TRUE
@@ -289,7 +284,7 @@ loc_data_int = ts_data_d[gps_idx2]
 loc_cols_int = zoo::na.approx(loc_data_int[,c("location-lat", "location-lon")])
 # 7 Push back into main df
 ts_data_d2 = ts_data_d
-ts_data_d2[gps_idx2, c("location-lat", "location-lon")] = loc_cols_int
+ts_data_d2[gps_idx2, c("location-lat", "location-lon")] = data.frame(loc_cols_int)
 
 # 5. Subset data
 # 6. Interpolate GPS values 
@@ -344,7 +339,59 @@ leaflet(data = tsting3) %>%
 
 
 
+d_data_loc = d_data_df[!is.na(`location-lat`)]
+d_data_loc = d_data_loc[TagID=="ch_gps03_S1"]
+#d_data_loc = d_data_loc[Mean_depth_m<0.4]
+##############################################################
 
 
+############# ALL GPS PLOTS ###############
+# Load Data
+d_data_df = fread(file = "../Data/BIOT_DGBP/all_d_data.csv")
+d_data_loc = d_data_df[!is.na(`location-lat`)]
+# Grab IDs
+ids = unique(d_data_loc$TagID)
+# Subset of base layers to test
+views = c('OpenTopoMap', 'Esri.WorldStreetMap', 'Esri.WorldImagery', 'Esri.OceanBasemap', 'Esri.NatGeoWorldMap')
+# Plot all bird tracks over each layer
+for (view in views){
+  m = leaflet(data = d_data_loc) %>% addProviderTiles(view)
+  for (i in 1:length(ids)){
+    m = addPolylines(m, lng = ~`location-lon`, lat = ~`location-lat`, 
+                     data = d_data_loc[TagID==ids[i]], 
+                     color = rainbow(length(ids))[i],
+                     weight = 2,
+                     opacity = .9)
+  }
+  mapshot(m, file = sprintf('../Plots/GPS_%s.png', view))
+}
+#############################################
+
+
+
+
+pal <- colorNumeric(palette = "YlOrRd", domain = d_data_loc$Mean_depth_m, reverse = TRUE)
+
+leaflet(data = d_data_loc) %>% 
+  #addTiles() %>% 
+  #addProviderTiles(providers$Esri.NatGeoWorldMap) %>%
+  #addProviderTiles('Esri.WorldImagery') %>%
+  #addProviderTiles(providers$OpenStreetMap.Mapnik) %>%
+  #addProviderTiles('Stadia.Outdoors') %>%
+  addProviderTiles('OpenTopoMap') %>%
+  #addProviderTiles(providers$OpenStreetMap.HOT) %>%
+  #addCircleMarkers(lng = d_data_loc$`location-lon`, 
+  #                 lat = d_data_loc$`location-lat`, 
+  #                 color = ~pal(Mean_depth_m), 
+  #                 radius = 1) %>% 
+  addPolylines(lng = d_data_loc$`location-lon`, 
+               lat = d_data_loc$`location-lat`, 
+               color = "red",
+               weight = 2,
+               opacity = .4) %>%
+  addLegend(position = "bottomright", pal = pal, values = d_data_loc$Mean_depth_m, title = "Depth")#, 
+            #labFormat = labelFormat(transform = function(x) sort(x, decreasing = TRUE))) 
+  #addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`, icon = birdIcon)
+  #%>% addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`)
 
 

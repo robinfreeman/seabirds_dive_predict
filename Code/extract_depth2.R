@@ -51,6 +51,38 @@ for (i in 1:length(files)) {
   
   # Note number of GPS rows and their indexes
   gps_idx = which(!is.na(ts_data_d$`location-lon`))
+  
+  ################ INTERPOLATE GPS #####################
+  cat("\rInterpolating GPS...")
+  diffs = diff(gps_idx)
+  # 1. Find gps_indexes between which to interpolate
+  gaps = which(diffs>60) 
+  starts = gps_idx[gaps]
+  # 2. Determine number of interpolations to be made between each
+  steps = floor(diffs[gaps]/30)
+  # 3. Find hypothetical indexes to interpolate at
+  int_ix = apply(cbind(starts,steps), 1, function(v) seq(v[1], v[1]+v[2]*30, 30))
+  # 4. Add these indexes to gps_index (maybe a new vector)
+  gps_idx = sort(unique(c(unlist(int_ix), gps_idx)))
+  # 5. Subset data for location interpolation
+  loc_data_int = ts_data_d[gps_idx]
+  # 6. Interpolate GPS rows
+  loc_cols_int = zoo::na.approx(loc_data_int[,c("location-lat", "location-lon")])
+  # 7 Push back into main df
+  ts_data_d[gps_idx, c("location-lat", "location-lon")] = data.frame(loc_cols_int)
+  ######################################################
+  
+  ################ ADD ACCELERATION COL #####################
+  #ts_data_a = ts_data[!is.na(X)]
+  #ts_data_a$Acceleration = sqrt(ts_data_a$X^2 + ts_data_a$Y^2 + ts_data_a$Z^2) # magnitude of acceleration
+  #ts_data_a$Mean_acceleration = NA
+  #wndow = 0.5*30*25
+  #gps_idx = which(!is.na(ts_data_a$`location-lat`))
+  #mean_acc = sapply(gps_idx, function(i) mean(ts_data_a$Acceleration[(i-wndow):(i+wndow)]))
+  #mean_depth[is.na(mean_depth)] = 0
+  #ts_data_a$Mean_acceleration[gps_idx] = mean_acc
+  ######################################################
+  
   n = length(gps_idx) 
   
   # Initialise vecs
@@ -85,7 +117,7 @@ for (i in 1:length(files)) {
     
   #g = grid.arrange(g1, g2, ncol=1)
   
-  ggsave(g, file=paste0('../Plots/', this_bird, "_alt_plot.png"), width = 9, height = 9)
+  #ggsave(g, file=paste0('../Plots/', this_bird, "_alt_plot.png"), width = 9, height = 9)
   
   ### PLOT DEPTH OVER GPS ###
   
@@ -124,7 +156,6 @@ for (i in 1:length(files)) {
   
   #birdIcon <- makeIcon(iconUrl = '../Images/imgbin_computer-icons-project-symbol-png.png', iconWidth = 20, iconHeight = 20)
   #birdIcon <- makeIcon(iconUrl = 'http://www.pngall.com/wp-content/uploads/2017/05/Map-Marker-Free-Download-PNG.png')
-  
   pal <- colorNumeric(palette = "YlOrRd", domain = loc_data$Mean_depth_m, reverse = TRUE)
   
   m <- leaflet(data = loc_data) %>% 
@@ -143,11 +174,54 @@ for (i in 1:length(files)) {
               labFormat = labelFormat(transform = function(x) sort(x, decreasing = TRUE))) %>%
     #addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`, icon = birdIcon)
     addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`)
-  
-  
   m
-
-  mapshot(m, file = sprintf("../Plots/depth_mean_%s.png", this_bird))
+  
+  
+  #pal <- colorNumeric(palette = "YlOrRd", domain = loc_data_INTERPOLATED$Mean_depth_m, reverse = TRUE)
+  #m_INTERPOLATED <- leaflet(data = loc_data_INTERPOLATED) %>% 
+  #  addProviderTiles('Esri.WorldImagery') %>%
+  #  addCircleMarkers(lng = loc_data_INTERPOLATED$`location-lon`, 
+  #                   lat = loc_data_INTERPOLATED$`location-lat`, 
+  #                   color = ~pal(Mean_depth_m), 
+  #                   radius = 1) %>% 
+  #  addPolylines(lng = loc_data_INTERPOLATED$`location-lon`, 
+  #               lat = loc_data_INTERPOLATED$`location-lat`, 
+  #               color = "black",
+  #               weight = 2,
+  #               opacity = .4) %>%
+  #  addLegend(position = "bottomright", pal = pal, values = loc_data_INTERPOLATED$Mean_depth_m, title = "Depth", 
+  #            labFormat = labelFormat(transform = function(x) sort(x, decreasing = TRUE))) %>%
+  #  #addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`, icon = birdIcon)
+  #  addMarkers(lng = lox_INTERPOLATED$`location-lon`, lat = lox_INTERPOLATED$`location-lat`)
+  
+  #boxplot(loc_data_INTERPOLATED$Mean_depth_m)
+  #boxplot(loc_data_INTERPOLATED$Mean_depth_m[-which(loc_data_INTERPOLATED$Mean_depth_m>0.6)])
+  #boxplot(loc_data_INT_no_outliers$Mean_depth_m)
+  
+  #loc_data_INT_no_outliers = loc_data_INTERPOLATED
+  #loc_data_INT_no_outliers$Mean_depth_m[which(loc_data_INTERPOLATED$Mean_depth_m>0.6)] = loc_data_INT_no_outliers$Mean_depth_m[which(loc_data_INTERPOLATED$Mean_depth_m>0.6)]/2
+  #pal <- colorNumeric(palette = "YlOrRd", domain = loc_data_INT_no_outliers$Mean_depth_m, reverse = TRUE)
+  #m_INTERPOLATED_no_outliers <- leaflet(data = loc_data_INT_no_outliers) %>% 
+    #addTiles() %>% 
+  #  addProviderTiles('Esri.WorldImagery') %>%
+  #  addCircleMarkers(lng = loc_data_INT_no_outliers$`location-lon`, 
+  #                   lat = loc_data_INT_no_outliers$`location-lat`, 
+  #                   color = ~pal(Mean_depth_m), 
+  #                   radius = 1) %>% 
+  #  addPolylines(lng = loc_data_INT_no_outliers$`location-lon`, 
+  #               lat = loc_data_INT_no_outliers$`location-lat`, 
+  #               color = "black",
+  #               weight = 2,
+  #               opacity = .4) %>%
+  #  addLegend(position = "bottomright", pal = pal, values = loc_data_INT_no_outliers$Mean_depth_m, title = "Depth", 
+  #            labFormat = labelFormat(transform = function(x) sort(x, decreasing = TRUE))) %>%
+  #  #addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`, icon = birdIcon)
+  #  addMarkers(lng = lox_INTERPOLATED$`location-lon`, lat = lox_INTERPOLATED$`location-lat`)
+  
+  #addAwesomeMarkers(m_INTERPOLATED_no_outliers, lng = lox_INTERPOLATED$`location-lon`, 
+  #                  lat = lox_INTERPOLATED$`location-lat`, icon = "arrow-up")
+  
+  #mapshot(m, file = sprintf("../Plots/depth_mean_%s.png", this_bird))
   
   cat("\rDone!\n")
 }
