@@ -201,9 +201,8 @@ this_data$Dive[gps.idx] = dives
 
 
 ############## CREATING ACCELERATION DEEP LEARNING DATA SET #################
-#window.size = 25*30
+# METHOD 1
 atm = proc.time()
-#idx_range = (window.size+1):(nrow(ts_data)-window.size)
 idx_range = head(which(!is.na(ts_data$Depth)), -1)[-1] # removes first and last index of depth rows
 tst = sapply(idx_range, function(ix, wdw=25, thrshold=0.5) {
   X = ts_data$X[(ix-wdw):(ix+wdw)]
@@ -212,8 +211,25 @@ tst = sapply(idx_range, function(ix, wdw=25, thrshold=0.5) {
   dive = ts_data$Depth[ix]>thrshold
   return(c(X,Y,Z,dive))
 })
-fwrite(tst, file = "../Data/BIOT_DGBP/ACCELERATION_ML_DATASET.csv")
+fwrite(tst, file = "../Data/centred_acc_train_data.csv")
 proc.time() - atm
+
+
+
+# METHOD 2
+ts_data_e = ts_data[1:125000]
+atm = proc.time()
+wdw = 250
+tst3 = sapply(1:(nrow(ts_data)-wdw), function(ix, thrshold=0.5) {
+  X = ts_data$X[ix:(ix+wdw)]
+  Y = ts_data$Y[ix:(ix+wdw)]
+  Z = ts_data$Z[ix:(ix+wdw)]
+  dive = any(na.omit(ts_data$Depth[ix:(ix+wdw)]) > thrshold) # do any dives occur in this window?
+  return(c(X,Y,Z,dive))
+})
+tst3 = t(tst3)
+proc.time() - atm
+
 ############################################################################
 
 
@@ -347,15 +363,14 @@ d_data_loc = d_data_loc[TagID=="ch_gps03_S1"]
 
 ############# ALL GPS PLOTS ###############
 # Load Data
-d_data_df = fread(file = "../Data/BIOT_DGBP/all_d_data.csv")
-d_data_loc = d_data_df[!is.na(`location-lat`)]
+d_data_loc = fread(file = "../Data/BIOT_DGBP/all_gps_data.csv")
 # Grab IDs
 ids = unique(d_data_loc$TagID)
 # Subset of base layers to test
 views = c('OpenTopoMap', 'Esri.WorldStreetMap', 'Esri.WorldImagery', 'Esri.OceanBasemap', 'Esri.NatGeoWorldMap')
 # Plot all bird tracks over each layer
 for (view in views){
-  m = leaflet(data = d_data_loc) %>% addProviderTiles(view)
+  m = leaflet(data = d_data_loc) %>% addProviderTiles(view)# %>% setView(zoom = 18)
   for (i in 1:length(ids)){
     m = addPolylines(m, lng = ~`location-lon`, lat = ~`location-lat`, 
                      data = d_data_loc[TagID==ids[i]], 
@@ -363,9 +378,12 @@ for (view in views){
                      weight = 2,
                      opacity = .9)
   }
+  m = addLegend(m, position = "bottomright", colors = rainbow(length(ids)), labels = ids, title = "Bird")
   mapshot(m, file = sprintf('../Plots/GPS_%s.png', view))
 }
 #############################################
+
+
 
 
 
@@ -394,4 +412,43 @@ leaflet(data = d_data_loc) %>%
   #addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`, icon = birdIcon)
   #%>% addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`)
 
+
+
+
+
+
+
+
+
+
+
+### DEEP LEARNING CODE ####
+# Get Keras ready
+library(keras)
+library(data.table)
+install_keras()
+
+data <- fread(file = '../Data/centred_acc_train_data.csv', header = TRUE)
+
+# Alternative simple classification MLP with dropout
+classify_model <- keras_model_sequential()
+# 2048 inputs into 784 hidden units (with dropout to help generalisation)
+classify_model %>%
+  layer_dense(units = 784, input_shape = c(2048)) %>% # Size of layer
+  layer_dropout(rate=0.2) %>%                 # Apply dropout to nodes in layer
+  layer_activation(activation = 'relu') %>% # Activation of nodes in layer
+  layer_dense(units = 1, activation = 'sigmoid') # final layer is is single softmax output
+
+#compiling the defined model with metric = accuracy and optimiser as adam.
+classify_model %>% compile(
+  optimizer = 'rmsprop',
+  loss = 'binary_crossentropy',
+  metrics = c('accuracy')
+)
+
+# Fit model
+classify_model %>% fit(train_x, train_y, epochs = 200, batch_size = 128)
+
+# Evaluate model
+loss_and_metrics <- classify_model %>% evaluate(test_x, test_y, batch_size = 128)
 
