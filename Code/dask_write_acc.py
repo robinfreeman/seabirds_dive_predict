@@ -83,7 +83,7 @@ def main(arr, birdID, outdir, wdw=250):
     :param arr: numpy array containing 4 columns: X, Y, Z, and Depth
     :return:
     """
-    assert outdir.endswith('/'), "outdir argument string must end with a '/'"
+    assert outdir.endswith('/'), "outdir arg must end with a '/'"
 
     x = da.lib.stride_tricks.sliding_window_view(arr[:, 0], wdw)
     y = da.lib.stride_tricks.sliding_window_view(arr[:, 1], wdw)
@@ -93,11 +93,11 @@ def main(arr, birdID, outdir, wdw=250):
     d = da.apply_along_axis(check_for_dive, 1, depth)
     train_data = da.hstack((x, y, z, d.reshape((d.shape[0], 1))))
 
-    meta = to_npz_stack(f'{outdir}{birdID}', train_data, axis=0)
+    da.to_npy_stack(f'{outdir}{birdID}', train_data, axis=0)
 
     # Informative output stats
-    meta_out = {'shape': train_data.shape, 'files': len(train_data.chunks[0])}
-    meta_out.update(meta)
+    meta_out = {'Shape': train_data.shape, 'Files': len(train_data.chunks[0])}
+    #meta_out.update(meta)
 
     return meta_out
 
@@ -107,10 +107,10 @@ if __name__ == '__main__':
     # check inputs
     if len(sys.argv) != 3:
         pth = '../Data/BIOT_DGBP/BIOT_DGBP/'
-        outdir = '../Data/Acc/'
+        outdir = '../Data/Acc_npy/'
         print(f"WARNING: incorrect number of args provided. Please provide "
-              f"2 directory paths:\n1. Path to input files.\n2. Path to output."
-              f"\nDefaults used:\nInput: '{pth}'\nOutput: {outdir}")
+              f"2 directory paths:\n1.\tPath to input files.\n2.\tPath to output."
+              f"\nDefaults used:\nIn:\t'{pth}'\nOut:\t'{outdir}'")
     else:
         pth = sys.argv[1]
         outdir = sys.argv[2]
@@ -140,7 +140,7 @@ if __name__ == '__main__':
 
         tok = time.time() - tik
 
-        print("Time elapsed: %.2fs" % tok)
+        print("\tTime elapsed: %.2fs" % tok)
         count += tok
 
     sys.exit('\nDone\n\nTotal time elapsed: %.2fs' % count)
