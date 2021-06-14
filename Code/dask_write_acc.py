@@ -24,7 +24,7 @@ from dask.base import compute_as_if_collection #
 
 ## Functions ##
 
-def check_for_dive(arr, thrshold=0.5):
+def check_for_dive(arr, thrshold=0.4):
     """
     Determines whether dive occured in given window of depth values.
 
@@ -92,6 +92,8 @@ def main(arr, birdID, outdir, wdw=250):
 
     d = da.apply_along_axis(check_for_dive, 1, depth)
     train_data = da.hstack((x, y, z, d.reshape((d.shape[0], 1))))
+    shuf_ix = da.random.choice(len(train_data), len(train_data), replace=False)
+    train_data = train_data[shuf_ix].rechunk(train_data.chunks)
 
     da.to_npy_stack(f'{outdir}{birdID}', train_data, axis=0)
 

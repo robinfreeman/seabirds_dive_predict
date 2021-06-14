@@ -452,3 +452,163 @@ classify_model %>% fit(train_x, train_y, epochs = 200, batch_size = 128)
 # Evaluate model
 loss_and_metrics <- classify_model %>% evaluate(test_x, test_y, batch_size = 128)
 
+
+
+
+
+### FLATTENING BASELINE, TRY AFTER LINE 124 OF EXTRACT_DEPTH ###
+ts_data_d = ts_data_d[Depth<10]
+#k=3000
+
+for (k in c(20, 30, 50, 100, 250, 500, 750, 1000, 1500, 3000, 5000, 10000, 15000, 20000)){
+  
+  offset <- zoo::rollmedian(ts_data_d$Depth, k=k)
+  
+  dif <- length(ts_data_d$Depth) - length(offset)
+  
+  offset <- c(offset, rep(offset[length(offset)], dif))
+  
+  new_series = ts_data_d$Depth - offset
+  
+  new_series[new_series<0] = 0
+  
+  ts_data_d$Depth_mod = new_series
+
+  g2 = ggplot(ts_data_d, aes(x = datetime, y = Depth_mod))  +  
+    geom_point(size=0.1) 
+  
+  ggsave(g2, file=paste0('../Plots/comp/', this_bird, "_alt_plot_", k, "Postv.png"), width = 9, height = 9)
+  
+}
+
+
+
+files = list.files("../Data/BIOT_DGBP/BIOT_DGBP/", pattern = "1.csv", full.names = TRUE)
+
+getmode <- function(v) {
+  uniqv <- unique(na.omit(v))
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+# For each file, extract pressure data and resave as *_p.csv
+for (i in 1:length(files)) {
+  
+  f = files[i]
+  cat(sprintf("Processing file: %s\n", f))
+  
+  cat("Reading in file...")
+  
+  # Read in file and subset rows containing pressure data
+  ts_data = fread(file = f)
+  ts_data_d = ts_data[!is.na(Depth)]
+  this_bird = unique(ts_data_d$TagID)
+  
+  cat("\rCalculating distances travelled...")
+  
+  # Determine nest coordinates (as then most common GPS)
+  nest_coords = c(getmode(ts_data_d$`location-lon`), getmode(ts_data_d$`location-lat`))
+  
+  # convert date and time to readable format
+  datetime_s = paste(ts_data_d$Date, ts_data_d$Time)
+  ts_data_d$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S.000")
+  
+  # work out max dist from dg and total distance
+  ts_data_d$dist_to_dg_m = distHaversine(nest_coords, cbind(ts_data_d$`location-lon`, ts_data_d$`location-lat`))
+  ts_data_d$dist_to_dg_km = ts_data_d$dist_to_dg_m/1000
+  
+  # Initialise cols
+  ts_data_d$dist_moved_m = ts_data_d$time_diff_s = NA
+  
+  # Note number of GPS rows and their indexes
+  gps_idx = which(!is.na(ts_data_d$`location-lon`))
+  
+  ################ INTERPOLATE GPS #####################
+  cat("\rInterpolating GPS...")
+  diffs = diff(gps_idx)
+  # 1. Find gps_indexes between which to interpolate
+  gaps = which(diffs>60) 
+  starts = gps_idx[gaps]
+  # 2. Determine number of interpolations to be made between each
+  steps = floor(diffs[gaps]/30)
+  # 3. Find hypothetical indexes to interpolate at
+  int_ix = apply(cbind(starts,steps), 1, function(v) seq(v[1], v[1]+v[2]*30, 30))
+  # 4. Add these indexes to gps_index (maybe a new vector)
+  gps_idx = sort(unique(c(unlist(int_ix), gps_idx)))
+  # 5. Subset data for location interpolation
+  loc_data_int = ts_data_d[gps_idx]
+  # 6. Interpolate GPS rows
+  loc_cols_int = zoo::na.approx(loc_data_int[,c("location-lat", "location-lon")])
+  # 7 Push back into main df
+  ts_data_d[gps_idx, c("location-lat", "location-lon")] = data.frame(loc_cols_int)
+  ######################################################
+  
+  ################ ADD ACCELERATION COL #####################
+  #ts_data_a = ts_data[!is.na(X)]
+  #ts_data_a$Acceleration = sqrt(ts_data_a$X^2 + ts_data_a$Y^2 + ts_data_a$Z^2) # magnitude of acceleration
+  #ts_data_a$Mean_acceleration = NA
+  #wndow = 0.5*30*25
+  #gps_idx = which(!is.na(ts_data_a$`location-lat`))
+  #mean_acc = sapply(gps_idx, function(i) mean(ts_data_a$Acceleration[(i-wndow):(i+wndow)]))
+  #mean_depth[is.na(mean_depth)] = 0
+  #ts_data_a$Mean_acceleration[gps_idx] = mean_acc
+  ######################################################
+  
+  n = length(gps_idx) 
+  
+  # Initialise vecs
+  dist.temp = time.diff.temp = rep(0, n) 
+  
+  # Subset cols
+  lon.temp = ts_data_d$`location-lon`[gps_idx]
+  lat.temp = ts_data_d$`location-lat`[gps_idx]
+  datetime.temp = ts_data_d$datetime[gps_idx]
+  
+  # Calculate distance moved and time taken between each data point
+  dist.temp[-1] = distHaversine(cbind(lon.temp[-n], lat.temp[-n]), cbind(lon.temp[-1], lat.temp[-1]))
+  time.diff.temp[-1] = as.numeric(datetime.temp[-1] - datetime.temp[-n])
+  
+  # Load into df
+  ts_data_d$dist_moved_m[gps_idx] = dist.temp
+  ts_data_d$time_diff_s[gps_idx] = time.diff.temp
+  
+  # Calculate speed
+  ts_data_d$calc_sp_ms = ts_data_d$dist_moved_m/ts_data_d$time_diff_s
+  
+  
+  ################ Flatten curve ##############
+  k = 30
+  
+  #offset <- zoo::rollmedian(ts_data_d$Depth, k=k)
+  
+  offset = zoo::rollapply(ts_data_d$Depth, width=k, by=k, FUN=median)
+  offset= rep(offset, each=k)
+
+  dif <- length(ts_data_d$Depth) - length(offset)
+  
+  offset <- c(offset, rep(tail(offset, 1), dif))
+  
+  new_series = ts_data_d$Depth - offset
+  
+  new_series[new_series<0] = 0 # negative depth meaningless
+  
+  #tail(new_series, dif) = 0 # because no dives when device removed
+  
+  new_series[(length(new_series)-dif):length(new_series)] = 0
+  
+  ts_data_d$Depth_mod = new_series
+  ################################################
+  
+  # Plot depth time series
+  cat("\rPlotting depth time series...")
+  threshold = 0.1
+
+  g = ggplot(ts_data_d, aes(x = datetime, y = Depth_mod))  +  
+    geom_point(size = 0.1) + 
+    geom_hline(yintercept=threshold, color="red", linetype="dashed", size=0.2) +
+    geom_hline(yintercept=0.02, color="blue", linetype="dashed", size=0.2) +
+    geom_hline(yintercept=0.03, color="green", linetype="dashed", size=0.2) 
+    
+  #g
+  
+  ggsave(g, file=paste0('../Plots/New_method/M_', this_bird, "_alt_plot_", k, ".png"), width = 9, height = 9)
+}

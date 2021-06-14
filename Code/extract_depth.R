@@ -22,6 +22,13 @@ cat('\nExtracting pressure data...\n\n')
 # Get all Pressure files (containing Pressure/activity data)
 files = list.files("../Data/BIOT_DGBP/BIOT_DGBP/", pattern = "1.csv", full.names = TRUE)
 data_list = list()
+sum_stats = list()
+
+# Function to extract statistical mode
+getmode <- function(v) {
+  uniqv <- unique(na.omit(v))
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
 
 # For each file, extract pressure data and resave as *_p.csv
 for (i in 1:length(files)) {
@@ -38,12 +45,15 @@ for (i in 1:length(files)) {
   
   cat("\rCalculating distances travelled...")
   
+  # Determine nest coordinates (as then most common GPS)
+  nest_coords = c(getmode(ts_data_d$`location-lon`), getmode(ts_data_d$`location-lat`))
+  
   # convert date and time to readable format
   datetime_s = paste(ts_data_d$Date, ts_data_d$Time)
   ts_data_d$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S.000")
   
   # work out max dist from dg and total distance
-  ts_data_d$dist_to_dg_m = distHaversine(c(72.41111, -7.31333), cbind(ts_data_d$`location-lon`, ts_data_d$`location-lat`))
+  ts_data_d$dist_to_dg_m = distHaversine(nest_coords, cbind(ts_data_d$`location-lon`, ts_data_d$`location-lat`))
   ts_data_d$dist_to_dg_km = ts_data_d$dist_to_dg_m/1000
   
   # Initialise cols
@@ -104,23 +114,42 @@ for (i in 1:length(files)) {
   # Calculate speed
   ts_data_d$calc_sp_ms = ts_data_d$dist_moved_m/ts_data_d$time_diff_s
   
-  # Plot depth time series
+  ######## REMOVE BACKGROUND NOISE ########## 
+  cat("\rTransforming data...")
+  k = 30
+  
+  # take rolling median as baseline for each window
+  offset = zoo::rollapply(ts_data_d$Depth, width=k, by=k, FUN=median)
+  offset= rep(offset, each=k)
+  
+  # match lengths
+  dif <- length(ts_data_d$Depth) - length(offset)
+  offset <- c(offset, rep(tail(offset, 1), dif))
+  
+  # Zero-offset data
+  new_series = ts_data_d$Depth - offset
+  new_series[new_series<0] = 0 # negative depth meaningless
+  new_series[(length(new_series)-dif):length(new_series)] = 0 # no dives as device removed
+  ts_data_d$Depth_mod = new_series
+
+  ######### PLOT DEPTH TIME-SERIES ###########
   cat("\rPlotting depth time series...")
-  threshold = 0.5
+
   #g1 = ggplot(ts_data_d, aes(x = datetime, y = `height-msl`)) +  
   #  geom_point() 
-  g = ggplot(ts_data_d, aes(x = datetime, y = Depth))  +  
-    geom_point() + 
-    geom_hline(yintercept=threshold, color="blue", linetype="dashed") #+
-    #geom_hline(yintercept=0.4, color="red", linetype="dashed") + 
-    #geom_hline(yintercept=0.3, color="green", linetype="dashed") 
+  g1 = ggplot(ts_data_d, aes(x = datetime, y = Depth))  +  
+    geom_point(size=0.1) + 
+    ggtitle("Depth time-series (raw)")
+
+  g2 = ggplot(ts_data_d, aes(x = datetime, y = Depth_mod))  +  
+    geom_point(size = 0.1) + 
+    ggtitle("Depth time-series (transformed)") 
     
-  #g = grid.arrange(g1, g2, ncol=1)
+  g = grid.arrange(g1, g2, ncol=1)
   
-  #ggsave(g, file=paste0('../Plots/', this_bird, "_alt_plot.png"), width = 9, height = 9)
+  ggsave(g, file=paste0('../Plots/', this_bird, "_alt_plot.png"), width = 9, height = 9)
   
-  ### PLOT DEPTH OVER GPS ###
-  
+  ############ PLOT DEPTH OVER GPS ############
   cat("\rPlotting depth over GPS...")
   
   # New cols for dive profile assignment
@@ -140,7 +169,7 @@ for (i in 1:length(files)) {
   # Load into new cols
   ts_data_d$Max_depth_m[gps_idx] = deepest
   ts_data_d$Mean_depth_m[gps_idx] = mean_depth
-  ts_data_d$Dive[gps_idx] = dives
+  ts_data_d$Dive[gps_idx] = dives # these signify whether a single depth value exceeds threshold in window around GPS record
   
   # Write data frame to out file and add to data_list
   fwrite(ts_data_d, gsub(".csv", "_dep.csv", f)) # write out file
@@ -160,6 +189,7 @@ for (i in 1:length(files)) {
   
   m <- leaflet(data = loc_data) %>% 
     #addTiles() %>% 
+    #addProviderTiles('OpenTopoMap') %>%
     addProviderTiles('Esri.WorldImagery') %>%
     addCircleMarkers(lng = loc_data$`location-lon`, 
                      lat = loc_data$`location-lat`, 
@@ -174,9 +204,33 @@ for (i in 1:length(files)) {
               labFormat = labelFormat(transform = function(x) sort(x, decreasing = TRUE))) %>%
     #addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`, icon = birdIcon)
     addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`)
-  m
   
+  ##//////////////////////////////////////////////////////////////////////////////
+  # Max depth
+  pal <- colorNumeric(palette = "YlOrRd", domain = loc_data$Max_depth_m, reverse = TRUE)
   
+  m2 <- leaflet(data = loc_data) %>% 
+    #addTiles() %>% 
+    #addProviderTiles('OpenTopoMap') %>%
+    addProviderTiles('Esri.WorldImagery') %>%
+    addCircleMarkers(lng = loc_data$`location-lon`, 
+                     lat = loc_data$`location-lat`, 
+                     color = ~pal(Max_depth_m), 
+                     radius = 1) %>% 
+    addPolylines(lng = loc_data$`location-lon`, 
+                 lat = loc_data$`location-lat`, 
+                 color = "black",
+                 weight = 2,
+                 opacity = .4) %>%
+    addLegend(position = "bottomright", pal = pal, values = loc_data$Max_depth_m, title = "Depth", 
+              labFormat = labelFormat(transform = function(x) sort(x, decreasing = TRUE))) %>%
+    #addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`, icon = birdIcon)
+    addMarkers(lng = lox$`location-lon`, lat = lox$`location-lat`)
+  
+  mapshot(m2, file = sprintf("../Plots/depth_max_%s.png", this_bird))
+  
+  ##//////////////////////////////////////////////////////////////////////////////
+
   #pal <- colorNumeric(palette = "YlOrRd", domain = loc_data_INTERPOLATED$Mean_depth_m, reverse = TRUE)
   #m_INTERPOLATED <- leaflet(data = loc_data_INTERPOLATED) %>% 
   #  addProviderTiles('Esri.WorldImagery') %>%
@@ -223,10 +277,30 @@ for (i in 1:length(files)) {
   
   #mapshot(m, file = sprintf("../Plots/depth_mean_%s.png", this_bird))
   
+  ## SUMMARY STATS ##
+  tot_time = as.numeric(diff(range(ts_data_d$datetime)))
+  max_dist = max(ts_data_d$dist_to_dg_km, na.rm = TRUE)
+  max_depth = max(ts_data_d$Depth)
+  mean_depth = mean(ts_data_d$Depth)
+  div = sum(ts_data_d$Depth>threshold)
+  non_div = nrow(ts_data_d)-div
+  
+  sum_stats[[this_bird]] = round(c(tot_time, max_dist, max_depth, 
+                             mean_depth, div, non_div), 2)
+  
   cat("\rDone!\n")
 }
 
-cat("\nWriting out file...")
+# Summary stats
+cat("\nWriting summary stats...")
+sumz = as.data.frame(t(data.frame(sum_stats)))
+colnames(sumz) = c('Time Tracked (days)', 'Max Distance Travelled (km)', 'Max Depth (m)', 
+                   'Mean Depth (m)', 'Dives (Depth>0.5)', 'Non-dives (Depth<=0.5)')
+sumz = cbind(BirdID = rownames(sumz), sumz)
+write.csv(sumz, file = '../Data/summary_stats.csv', row.names = FALSE)
+
+# All depth data
+cat("\nWriting depth data file...")
 d_data_df = rbindlist(data_list)
 fwrite(d_data_df, file = "../Data/BIOT_DGBP/all_d_data.csv")
 cat("\rDONE!")
