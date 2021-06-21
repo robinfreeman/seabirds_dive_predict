@@ -2,6 +2,7 @@
 # Script: extract_depth.R
 # Desc: Creates csv files containing only those rows of the parent files with depth data
 # Date: Apr 2021
+# TODO: make fread read last line as the transition is important! (just make it dry until the end?)
 
 ## Imports
 suppressMessages(library(data.table))
@@ -21,6 +22,8 @@ if (!all(files %in% tools::file_path_sans_ext(lux_files))){
   stop("There are .deg files with no corresponding .lux file.")
 }
 
+res = 6  # resolution (seconds)
+
 for (i in 1:length(files)){
   
   f = files[i]
@@ -38,8 +41,8 @@ for (i in 1:length(files)){
   colnames(lux_data)[1] = 'datetime'
   lux_data$datetime = as.POSIXct(lux_data$datetime, format = "%d/%m/%Y %H:%M:%S")
   
-  # Expand immersion data to 1s resolution
-  dur = im_data$duration
+  # Expand immersion data to 6s resolution
+  dur = im_data$duration = im_data$duration/res
   idx = cumsum(dur)
   expnd_data = expandRows(im_data, count = "duration", drop = TRUE)
   
@@ -49,7 +52,7 @@ for (i in 1:length(files)){
   expnd_data$datetime = do.call("c", apply(cbind(idx, dur), 1, FUN = function(v){
     # Expand time series backwards by v[2] seconds from start time 
     # at index = v[1]
-    return(rev(expnd_data$datetime[v[1]] - (seq_len(v[2]) - 1)))
+    return(rev(expnd_data$datetime[v[1]] - seq(0, length.out = v[2], by = res)))
   }))
   
   # Combine and save
@@ -63,5 +66,3 @@ for (i in 1:length(files)){
   
   ggsave(g, file=paste0('../Plots/', this_bird, "_LUX.png"), width = 9, height = 4.5)
 }
-
-#all(diff(expnd_data$datetime) == 1) # driftadj files not all separated by 1s. Inconsistencies.
