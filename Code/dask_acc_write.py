@@ -41,7 +41,7 @@ def parse_arguments():
     parser.add_argument('-t', dest='threshold', type=float,
                         default=0.03,
                         help='Depth threshold for identifying dives.')
-    parser.add_argument('-r', dest='reduced', type=bool,
+    parser.add_argument('-r', dest='reduce', type=bool,
                         default=True,
                         help='Boolean (True/False) indicating whether or not '
                              'you want larger dset written to a npy stack '
@@ -54,9 +54,9 @@ def parse_arguments():
           f'out:\t{args.out}\n'
           f'window:\t{args.window}\n'
           f'threshold:\t{args.threshold}\n'
-          f'reduced:\t{args.reduced}\n')
+          f'reduce:\t{args.reduce}\n')
 
-    return args.indir, args.out, args.window, args.threshold, args.reduced
+    return args.indir, args.out, args.window, args.threshold, args.reduce
 
 
 def check_for_dive(arr, thrshold=0.03):
@@ -70,14 +70,11 @@ def check_for_dive(arr, thrshold=0.03):
     return int((arr[~da.isnan(arr)] > thrshold).any())
 
 
-def rolling_acceleration_window(filepth, wdw, threshold):
+def rolling_acceleration_window(arr, wdw, threshold):
     """
     Create huge dset
     :return:
     """
-    arr = dd.read_csv(filepth, usecols=['X', 'Y', 'Z', 'Depth_mod']).to_dask_array(
-        lengths=True)
-
     x = da.lib.stride_tricks.sliding_window_view(arr[:, 0], wdw)
     y = da.lib.stride_tricks.sliding_window_view(arr[:, 1], wdw)
     z = da.lib.stride_tricks.sliding_window_view(arr[:, 2], wdw)
@@ -90,10 +87,10 @@ def rolling_acceleration_window(filepth, wdw, threshold):
 
 def reduce_dset(data, idd):
     """
-    Creates reduced dset for each bird
+    Creates reduce dset for each bird
     :param data: huge dask array of acc->dive data
     :param idd: bird id
-    :return: reduced dset
+    :return: reduce dset
     """
     # Sample dives
     dive_ix = da.where(data[:, -1] == 1)[0].compute()
@@ -116,14 +113,14 @@ def reduce_dset(data, idd):
     return data_add
 
 
-def main(indir, outpth, wdw=250, threshold=0.03, reduced=True):
+def main(indir, outpth, wdw=250, threshold=0.03, reduce=True):
     """
     Creates numpy dataframe by taking a rolling window of 250 rows of the input
     arr and horizontally arranging x, y, and z values followed by a binary
     value indicating whether or not a dive has occured in that window.
     """
     assert indir.endswith('/'), "indir arg must end with a '/'"
-    if reduced:
+    if reduce:
         assert not outpth.endswith('/'), "Out path should be to file, not dir"
 
     # Grab list of reevant file paths
@@ -142,15 +139,18 @@ def main(indir, outpth, wdw=250, threshold=0.03, reduced=True):
 
         # Create dset from rolling window
         print('\r\tCreating rolling window dset...')
-        train_data = rolling_acceleration_window(file, wdw, threshold)
+        arr = dd.read_csv(file, usecols=['X', 'Y', 'Z', 'Depth_mod']).to_dask_array(
+            lengths=True)
+        train_data = rolling_acceleration_window(arr, wdw, threshold)
         bird = re.search(r"/(\w+).csv", file).group(1)  # bird ID from path
 
-        if reduced:
+        if reduce:
             # Reduce dataset
             print('\r\tReducing dset...')
             out_dset = reduce_dset(train_data, bird)
             print('\r\tWriting to csv...')
-            out_dset.to_csv(outpth, mode='a', header=True, index=False)
+            out_dset.to_csv(outpth, mode='a', header=True if no == 1 else False,
+                            index=False)
         else:
             out_dset = train_data
             outdir = outpth if outpth.endswith('/') else outpth + '/'
@@ -163,7 +163,7 @@ def main(indir, outpth, wdw=250, threshold=0.03, reduced=True):
         tok = time.time() - tik
 
         # Informative output
-        d = (out_dset['Dive'] == 1).sum() if reduced else (out_dset[:, -1] == 1).sum()
+        d = (out_dset['Dive'] == 1).sum() if reduce else (out_dset[:, -1] == 1).sum()
         nd = out_dset.shape[0] - d
 
         print(f"\r\tDone!\n"
@@ -178,7 +178,7 @@ def main(indir, outpth, wdw=250, threshold=0.03, reduced=True):
         non_dives += nd
 
     # Informative output
-    shp = (rows, wdw*3+2) if reduced else (rows, wdw*3+1)  # no id col if npy
+    shp = (rows, wdw*3+2) if reduce else (rows, wdw*3+1)  # no id col if npy
     sys.exit(f"\nDone\n\nTotal time elapsed: %.2fs\n\n"
              f"Outfile stats:\n"
              f"\tShape: {shp}\n"
