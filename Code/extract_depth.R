@@ -7,21 +7,22 @@
 suppressMessages(library(data.table))
 suppressMessages(library(dplyr))
 suppressMessages(library(geosphere))
+suppressMessages(library(sp))
 
 ## Global variables
 threshold = 0.03
+
+diego.garcia = data.frame(c(72.420231, 72.453459, 72.457886, 72.500819, 72.500642, 72.483256, 
+                            72.483433, 72.507307, 72.429940, 72.409344, 72.420786, 72.343269), 
+                          c(-7.219409, -7.239153, -7.260946, -7.293678, -7.314442, -7.335030, 
+                            -7.358431, -7.380312, -7.457893, -7.437472, -7.343578, -7.270662))
+colnames(diego.garcia) = c('lon', 'lat')
 
 # Get all Pressure files (containing Pressure/activity data)
 cat('\nExtracting pressure data...\n\n')
 files = list.files("../Data/BIOT_DGBP/BIOT_DGBP/", pattern = "1.csv", full.names = TRUE)
 data_list = list()
 sum_stats = list()
-
-# Function to extract statistical mode
-getmode <- function(v) {
-  uniqv <- unique(na.omit(v))
-  uniqv[which.max(tabulate(match(v, uniqv)))]
-}
 
 # For each file, extract pressure data and resave as *_p.csv
 for (i in 1:length(files)) {
@@ -31,53 +32,39 @@ for (i in 1:length(files)) {
   
   cat("Reading in file...")
   
-  # Read in file and subset rows containing pressure data
+  # Read in file and subset rows containing depth data
   ts_data = fread(file = f)
-  ts_data_d = ts_data[!is.na(Depth)]
-  this_bird = unique(ts_data_d$TagID)
-  
-  ################ CALCULATING DISTANCE DATA #####################
-  cat("\rCalculating distances travelled...")
-  
-  # Determine nest coordinates (as then most common GPS)
-  nest_coords = c(getmode(ts_data_d$`location-lon`), getmode(ts_data_d$`location-lat`))
   
   # convert date and time to readable format
-  datetime_s = paste(ts_data_d$Date, ts_data_d$Time)
-  ts_data_d$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S.000")
+  cat("\rConverting times to readable format...")
+  datetime_s = paste(ts_data$Date, ts_data$Time)
+  ts_data$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S.000")
   
-  # work out max dist from dg and total distance
-  ts_data_d$dist_to_dg_m = distHaversine(nest_coords, cbind(ts_data_d$`location-lon`, ts_data_d$`location-lat`))
-  ts_data_d$dist_to_dg_km = ts_data_d$dist_to_dg_m/1000
+  # Subset depth data
+  ts_data_d = ts_data[!is.na(Depth)]
+  this_bird = unique(ts_data_d$TagID)
+
+  ################### TRIM DATA BEFORE FIRST DEPARTURE AND AFTER LAST RETURN #######
+  loc_data = ts_data_d[!is.na(`location-lon`)]
   
-  # Initialise cols
-  ts_data_d$dist_moved_m = ts_data_d$time_diff_s = NA
+  home.or.away = point.in.polygon(loc_data$`location-lon`, loc_data$`location-lat`
+                                  , diego.garcia$lon, diego.garcia$lat, 
+                                  mode.checked=FALSE)
   
-  # Note number of GPS rows and their indexes
-  gps_idx = which(!is.na(ts_data_d$`location-lon`))
-  n = length(gps_idx) 
+  start = loc_data$datetime[min(which(home.or.away == 0))]  # time of first departure
+  finish = loc_data$datetime[max(which(home.or.away == 0))]  # time of last return
   
-  # Initialise vecs
-  dist.temp = time.diff.temp = rep(0, n) 
-  
-  # Subset cols
-  lon.temp = ts_data_d$`location-lon`[gps_idx]
-  lat.temp = ts_data_d$`location-lat`[gps_idx]
-  datetime.temp = ts_data_d$datetime[gps_idx]
-  
-  # Calculate distance moved and time taken between each data point
-  dist.temp[-1] = distHaversine(cbind(lon.temp[-n], lat.temp[-n]), cbind(lon.temp[-1], lat.temp[-1]))
-  time.diff.temp[-1] = as.numeric(datetime.temp[-1] - datetime.temp[-n])
-  
-  # Load into df
-  ts_data_d$dist_moved_m[gps_idx] = dist.temp
-  ts_data_d$time_diff_s[gps_idx] = time.diff.temp
-  
-  # Calculate speed
-  ts_data_d$calc_sp_ms = ts_data_d$dist_moved_m/ts_data_d$time_diff_s
+  # Trim datasets
+  ts_data_d = ts_data_d[datetime > start & datetime < finish]
+  ts_data = ts_data[which(ts_data$datetime==(start+1)):which(ts_data$datetime==(finish-1))]
+  ###################################################################################
   
   ################ INTERPOLATE GPS #####################
+  # Note number of GPS rows and their indexes
   cat("\rInterpolating GPS...")
+  
+  gps_idx = which(!is.na(ts_data_d$`location-lon`))
+
   diffs = diff(gps_idx)
   # 1. Find gps_indexes between which to interpolate
   gaps = which(diffs>60) 
@@ -95,18 +82,9 @@ for (i in 1:length(files)) {
   # 7 Push back into main df
   ts_data_d[gps_idx, c("location-lat", "location-lon")] = data.frame(loc_cols_int)
   
-  ################ ADD ACCELERATION COL #####################
-  #ts_data_a = ts_data[!is.na(X)]
-  #ts_data_a$Acceleration = sqrt(ts_data_a$X^2 + ts_data_a$Y^2 + ts_data_a$Z^2) # magnitude of acceleration
-  #ts_data_a$Mean_acceleration = NA
-  #wndow = 0.5*30*25
-  #gps_idx = which(!is.na(ts_data_a$`location-lat`))
-  #mean_acc = sapply(gps_idx, function(i) mean(ts_data_a$Acceleration[(i-wndow):(i+wndow)]))
-  #mean_depth[is.na(mean_depth)] = 0
-  #ts_data_a$Mean_acceleration[gps_idx] = mean_acc
-  ######################################################
-  
   ######## REMOVE BACKGROUND NOISE ########## 
+  
+  #ts_data_d$Depth_mod = c(abs(diff(ts_data_d$Depth)), 0)
   cat("\rTransforming data...")
   k = 30
   
@@ -123,6 +101,12 @@ for (i in 1:length(files)) {
   new_series[new_series<0] = 0  # negative depth meaningless
   new_series[(length(new_series)-dif):length(new_series)] = 0  # no dives as device removed
   ts_data_d$Depth_mod = new_series
+  
+  # Append transformed depth col to original data
+  ts_data$Depth_mod = NA
+  dep_idx = which(!is.na(ts_data$Depth))
+  ts_data$Depth_mod[dep_idx] = new_series
+  #fwrite(ts_data, file=f)
 
   ############ MAX/MEAN DEPTH ############
   cat("\rAdding cols containing max/mean depth around GPS records...")
@@ -152,22 +136,26 @@ for (i in 1:length(files)) {
   fwrite(ts_data_d, gsub(".csv", "_dep.csv", f)) # write out file
   data_list[[i]] = ts_data_d
   
-  # Append transformed depth col to original data
-  ts_data$Depth_mod = NA
-  dep_idx = which(!is.na(ts_data$Depth))
-  ts_data$Depth_mod[dep_idx] = new_series
-  fwrite(ts_data, file=f)
+  # Acc data for ANN training
+  cat("Writing out:")
+  cat(paste0('../Data/BIOT_DGBP/', this_bird, '_ACC.csv'))
+  fwrite(ts_data %>% select(X, Y, Z, Depth_mod), file = paste0('../Data/BIOT_DGBP/', this_bird, '_ACC.csv'))
   
   ################# SUMMARY STATS ##################
+  dist.dta = fread(file = gsub(".csv", "_loc.csv", f), select = c('datetime', 'dist_to_dg_km', 'dist_moved_m')) %>%
+    filter(datetime >= start & datetime <= finish)
+  
+  # TODO: 
   cat("\rCalculating summary stats...")
-  tot_time = as.numeric(diff(range(ts_data_d$datetime)))
-  max_dist = max(ts_data_d$dist_to_dg_km, na.rm = TRUE)
+  tot_time = as.numeric(finish-start)
+  tot_dist = sum(dist.dta$dist_moved_m)/1000
+  max_dist = max(dist.dta$dist_to_dg_km, na.rm = TRUE)
   max_depth = max(ts_data_d$Depth)
   mean_depth = mean(ts_data_d$Depth)
-  div = sum(ts_data_d$Depth>threshold)
+  div = sum(ts_data_d$Depth_mod>threshold)
   non_div = nrow(ts_data_d)-div
   
-  sum_stats[[this_bird]] = round(c(tot_time, max_dist, max_depth, 
+  sum_stats[[this_bird]] = round(c(tot_time, tot_dist, max_dist, max_depth, 
                              mean_depth, div, non_div), 2)
   
   cat("\rDone!\n")
@@ -176,8 +164,8 @@ for (i in 1:length(files)) {
 # Summary stats
 cat("\nWriting summary stats...")
 sumz = as.data.frame(t(data.frame(sum_stats)))
-colnames(sumz) = c('Time Tracked (days)', 'Max Distance Travelled (km)', 'Max Depth (m)', 
-                   'Mean Depth (m)', 'Dives (Depth>0.5)', 'Non-dives (Depth<=0.5)')
+colnames(sumz) = c('Time Tracked (days)', 'Total Distance Travelled (km)', 'Max Distance Travelled (km)', 'Max Depth (m)', 
+                   'Mean Depth (m)', 'Dives', 'Non-dives')
 sumz = cbind(BirdID = rownames(sumz), sumz)
 write.csv(sumz, file = '../Data/summary_stats.csv', row.names = FALSE)
 

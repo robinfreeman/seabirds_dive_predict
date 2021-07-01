@@ -24,6 +24,12 @@ cat('\nExtracting GPS data...\n\n')
 files = list.files("../Data/BIOT_DGBP/BIOT_DGBP/", pattern = "1.csv", full.names = TRUE)
 data_list = list()
 
+# Function to extract statistical mode
+getmode <- function(v) {
+  uniqv <- unique(na.omit(v))
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
 # For each file, extract just location data and resave as *_loc.csv
 for (i in 1:length(files)) {
   
@@ -39,13 +45,18 @@ for (i in 1:length(files)) {
   datetime_s = paste(ts_data_loc$Date, ts_data_loc$Time)
   ts_data_loc$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S.000")
   
-  # Work out max dist from dg and total distance
-  ts_data_loc$dist_to_dg_m = distHaversine(c(72.41111, -7.31333), cbind(ts_data_loc$`location-lon`, ts_data_loc$`location-lat`))
+  cat("\rCalculating distances travelled...")
+  
+  # Determine nest coordinates (as the most common GPS)
+  nest_coords = c(getmode(ts_data_loc$`location-lon`), getmode(ts_data_loc$`location-lat`))
+  
+  # work out dists from nest
+  ts_data_loc$dist_to_dg_m = distHaversine(nest_coords, cbind(ts_data_loc$`location-lon`, ts_data_loc$`location-lat`))
   ts_data_loc$dist_to_dg_km = ts_data_loc$dist_to_dg_m/1000
   
   # Initialise cols
   ts_data_loc$dist_moved_m = ts_data_loc$time_diff_s = 0
-  
+
   n = nrow(ts_data_loc)
   
   # Calculate distance moved and time taken between each data point
@@ -58,6 +69,7 @@ for (i in 1:length(files)) {
   # Write data frame to out file and add to data_list
   fwrite(ts_data_loc, gsub(".csv", "_loc.csv", file)) 
   data_list[[i]] = ts_data_loc
+  
 }
 
 gps_data_df = rbindlist(data_list)

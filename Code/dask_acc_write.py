@@ -7,16 +7,13 @@ __author__ = 'Luke Swaby (lds20@ic.ac.uk)'
 __version__ = '0.0.1'
 
 ## Imports ##
-
+import core
 import os
 import sys
 import glob
 import re
 import time
-import random
 import argparse
-import numpy as np
-import pandas
 import dask.dataframe as dd
 import dask.array as da
 
@@ -33,7 +30,7 @@ def parse_arguments():
                         default='../Data/BIOT_DGBP/BIOT_DGBP/',
                         help='Path to directory containing the raw data')
     parser.add_argument('-o', dest='out', type=str,
-                        default='../Data/Acc_npy/',
+                        default='../Data/Reduced/reduced_all_dives.csv',
                         help='File/directory path for out file(s).')
     parser.add_argument('-w', dest='window', type=int,
                         default=250,
@@ -57,60 +54,6 @@ def parse_arguments():
           f'reduce:\t{args.reduce}\n')
 
     return args.indir, args.out, args.window, args.threshold, args.reduce
-
-
-def check_for_dive(arr, thrshold=0.03):
-    """
-    Determines whether dive occured in given window of depth values.
-
-    :param arr: array of depth values
-    :param thrshold: depth value past which a dive is defined
-    :return: boolean indicating whether dive has occured
-    """
-    return int((arr[~da.isnan(arr)] > thrshold).any())
-
-
-def rolling_acceleration_window(arr, wdw, threshold):
-    """
-    Create huge dset
-    :return:
-    """
-    x = da.lib.stride_tricks.sliding_window_view(arr[:, 0], wdw)
-    y = da.lib.stride_tricks.sliding_window_view(arr[:, 1], wdw)
-    z = da.lib.stride_tricks.sliding_window_view(arr[:, 2], wdw)
-    depth = da.lib.stride_tricks.sliding_window_view(arr[:, 3], wdw)
-
-    d = da.apply_along_axis(check_for_dive, 1, depth, threshold)
-    train_data = da.hstack((x, y, z, d.reshape((d.shape[0], 1))))
-
-    return train_data
-
-def reduce_dset(data, idd):
-    """
-    Creates reduce dset for each bird
-    :param data: huge dask array of acc->dive data
-    :param idd: bird id
-    :return: reduce dset
-    """
-    # Sample dives
-    dive_ix = da.where(data[:, -1] == 1)[0].compute()
-    pos = data[dive_ix]
-    n_dive = len(dive_ix)
-
-    # Sample non-dives
-    no_dive_ix = np.setdiff1d(np.arange(data.shape[0]), dive_ix)
-    n_no_dive = random.randint(n_dive, round(n_dive*1.1))
-    neg = data[da.random.choice(no_dive_ix, n_no_dive, replace=False)]
-
-    # Stack, shuffle and compute
-    data_add = dd.from_dask_array(da.vstack((pos, neg))).compute()
-    data_add = data_add.sample(frac=1)
-    data_add.columns = [*data_add.columns[:-1], 'Dive']  # rename last col
-    data_add['Dive'] = data_add['Dive'].astype(int)
-    data_add['BirdID'] = idd
-    data_add = data_add[['BirdID'] + list(data_add.columns[:-1])]  # reorder cols
-
-    return data_add
 
 
 def main(indir, outpth, wdw=250, threshold=0.03, reduce=True):
@@ -141,13 +84,13 @@ def main(indir, outpth, wdw=250, threshold=0.03, reduce=True):
         print('\r\tCreating rolling window dset...')
         arr = dd.read_csv(file, usecols=['X', 'Y', 'Z', 'Depth_mod']).to_dask_array(
             lengths=True)
-        train_data = rolling_acceleration_window(arr, wdw, threshold)
+        train_data = core.rolling_acceleration_window(arr, wdw, threshold)
         bird = re.search(r"/(\w+).csv", file).group(1)  # bird ID from path
 
         if reduce:
             # Reduce dataset
             print('\r\tReducing dset...')
-            out_dset = reduce_dset(train_data, bird)
+            out_dset = core.reduce_dset(train_data, bird)
             print('\r\tWriting to csv...')
             out_dset.to_csv(outpth, mode='a', header=True if no == 1 else False,
                             index=False)
