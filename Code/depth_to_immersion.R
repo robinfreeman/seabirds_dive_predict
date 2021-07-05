@@ -5,6 +5,7 @@
 # TODO: make fread read last line as the transition is important! (just make it dry until the end?)
 
 suppressMessages(library(data.table))
+suppressMessages(library(dplyr))
 suppressMessages(library(stringr))
 
 f = '../Data/GLS Data 2019 Jan DG RFB Short-term/gps_birdno.txt'
@@ -55,4 +56,4 @@ for (i in 1:nrow(full_dta)){
   fwrite(dta_join, file = paste0(outdir, 'GLS_x_Depth_', gps.id, '_', tolower(gls.id), '.csv'))
 }
 
-cat('\nDone!')
+cat('\nDone!\n')

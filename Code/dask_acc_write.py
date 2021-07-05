@@ -23,40 +23,40 @@ def parse_arguments():
     """Function to parse args from command line
     """
     parser = argparse.ArgumentParser(
-        description="Script for generating large data set for deep learning "
-                    "from rolling window of acceleration values..")
+    description="Script for generating large data set for deep learning "
+                "from rolling window of acceleration values..")
 
     parser.add_argument('-i', dest='indir', type=str,
-                        default='../Data/BIOT_DGBP/BIOT_DGBP/',
-                        help='Path to directory containing the raw data')
+                    default='../Data/BIOT_DGBP/',
+                    help='Path to directory containing the raw data')
     parser.add_argument('-o', dest='out', type=str,
-                        default='../Data/Reduced/reduced_all_dives.csv',
-                        help='File/directory path for out file(s).')
-    parser.add_argument('-w', dest='window', type=int,
-                        default=250,
-                        help='Rolling window width.')
-    parser.add_argument('-t', dest='threshold', type=float,
-                        default=0.03,
-                        help='Depth threshold for identifying dives.')
-    parser.add_argument('-r', dest='reduce', type=bool,
-                        default=True,
-                        help='Boolean (True/False) indicating whether or not '
-                             'you want larger dset written to a npy stack '
-                             '(False) or a reduced dset written to csv (True).')
+                    default='../Data/Reduced/ACC_reduced_all_dives.csv',
+                    help='File/directory path for out file(s).')
+    parser.add_argument('-w', dest='window', type=int, default=10,
+                    help='Rolling window width.')
+    parser.add_argument('-t', dest='threshold', type=float, default=0.03,
+                    help='Depth threshold for identifying dives.')
+    parser.add_argument('-f', dest='res', type=int, default=25,
+                    help='ACC resolution (Hz).')
+    parser.add_argument('-r', dest='reduce', type=bool, default=True,
+                    help='Boolean (True/False) indicating whether or not '
+                         'you want larger dset written to a npy stack '
+                         '(False) or a reduced dset written to csv (True).')
 
     args = parser.parse_args()
 
     print(f'PARAMS USED:\n'
           f'indir:\t{args.indir}\n'
           f'out:\t{args.out}\n'
-          f'window:\t{args.window}\n'
-          f'threshold:\t{args.threshold}\n'
+          f'window:\t{args.window}s\n'
+          f'thold:\t{args.threshold}\n'
+          f'res:\t{args.res}Hz\n'
           f'reduce:\t{args.reduce}\n')
 
-    return args.indir, args.out, args.window, args.threshold, args.reduce
+    return args.indir, args.out, args.window, args.threshold, args.res, args.reduce
 
 
-def main(indir, outpth, wdw=250, threshold=0.03, reduce=True):
+def main(indir, outpth, wdw=10, threshold=0.03, res=25, reduce=True):
     """
     Creates numpy dataframe by taking a rolling window of 250 rows of the input
     arr and horizontally arranging x, y, and z values followed by a binary
@@ -66,8 +66,12 @@ def main(indir, outpth, wdw=250, threshold=0.03, reduce=True):
     if reduce:
         assert not outpth.endswith('/'), "Out path should be to file, not dir"
 
+    if reduce and os.path.exists(outpth):
+        print(f'Removing outfile: {outpth}')
+        os.remove(outpth)  # remove file if already exists, otherwise out file will be appended
+
     # Grab list of reevant file paths
-    files = glob.glob(f'{indir}*1.csv')
+    files = glob.glob(f'{indir}*ACC.csv')
 
     t_count = 0
     rows = 0
@@ -82,18 +86,19 @@ def main(indir, outpth, wdw=250, threshold=0.03, reduce=True):
 
         # Create dset from rolling window
         print('\r\tCreating rolling window dset...')
-        arr = dd.read_csv(file, usecols=['X', 'Y', 'Z', 'Depth_mod']).to_dask_array(
-            lengths=True)
-        train_data = core.rolling_acceleration_window(arr, wdw, threshold)
-        bird = re.search(r"/(\w+).csv", file).group(1)  # bird ID from path
+        arr = dd.read_csv(file).to_dask_array(lengths=True)
+
+        train_data = core.rolling_acceleration_window(arr, wdw, threshold, res)
+        bird = re.search(r"/(\w+)_ACC.csv", file).group(1)  # bird ID from path
 
         if reduce:
             # Reduce dataset
             print('\r\tReducing dset...')
-            out_dset = core.reduce_dset(train_data, bird)
+            out_dset = core.reduce_dset(train_data)
+            out_dset['BirdID'] = bird
+            out_dset = out_dset[['BirdID', *out_dset.columns[:-1]]]  # reorder cols
             print('\r\tWriting to csv...')
-            out_dset.to_csv(outpth, mode='a', header=True if no == 1 else False,
-                            index=False)
+            out_dset.to_csv(outpth, mode='a', header=True if no == 1 else False, index=False)
         else:
             out_dset = train_data
             outdir = outpth if outpth.endswith('/') else outpth + '/'
@@ -121,7 +126,7 @@ def main(indir, outpth, wdw=250, threshold=0.03, reduce=True):
         non_dives += nd
 
     # Informative output
-    shp = (rows, wdw*3+2) if reduce else (rows, wdw*3+1)  # no id col if npy
+    shp = (rows, wdw*res*3+2) if reduce else (rows, wdw*res*3+1)  # no id col if npy
     sys.exit(f"\nDone\n\nTotal time elapsed: %.2fs\n\n"
              f"Outfile stats:\n"
              f"\tShape: {shp}\n"

@@ -37,6 +37,7 @@ for (i in 1:length(files)) {
   cat(sprintf("Processing file: %s\n", file))
   
   # Read in file and subset rows containing GPS data
+  cat("Loading data...")
   ts_data = fread(file = file)
   #save(ts_data, file = gsub(".csv", ".RData", file)) # save RDA file for quicker loading later
   ts_data_loc = ts_data[!is.na(`location-lat`)]
@@ -67,8 +68,11 @@ for (i in 1:length(files)) {
   ts_data_loc$calc_sp_ms = ts_data_loc$dist_moved_m/ts_data_loc$time_diff_s
   
   # Write data frame to out file and add to data_list
+  cat("\rWriting out file...")
   fwrite(ts_data_loc, gsub(".csv", "_loc.csv", file)) 
   data_list[[i]] = ts_data_loc
+  
+  cat("\rDone\n")
   
 }
 
