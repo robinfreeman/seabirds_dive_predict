@@ -32,7 +32,7 @@ def check_for_dive(arr, thrshold=0.03):
 
 def reduce_dset(data):
     """
-    Takes a balanced subset of a rolling window data set
+    Extracts a balanced subset from a rolling window data set
 
     Arguments:
      - data: dask array containing rolling window data
@@ -61,15 +61,22 @@ def reduce_dset(data):
 
 def rolling_acceleration_window(arr, wdw, threshold, res=25):
     """
-    Create huge dset
+    Creates a large data set from a rolling window of tri-axial acceleration records and depth
+    records for training a neural net.
 
-    wdw = seconds
-    res = no. of records per second
-    :return:
+    Arguments:
+     - arr: 4-column dask array containing X, Y, Z, and Depth records (in that order)
+     - wdw: int specifying window size in seconds
+     - threshold: Depth threshold past which a dive can be said to have occurred
+     - res: ACC data resolution (Hz)
+
+    Output:
+     - Rolling window dask array with each row consisting of flattened X, Y, Z vector followed by binary
+       int indicating whether ot not a dive has occurred within that window
     """
     # assert wdw % res == 0, f'Window size must be divisible by {res} for {res}Hz ACC data'
 
-    wdw *= res
+    wdw *= res  # expand resolution to no. of rows
 
     x = da.lib.stride_tricks.sliding_window_view(arr[:, 0], wdw)
     y = da.lib.stride_tricks.sliding_window_view(arr[:, 1], wdw)
@@ -86,14 +93,17 @@ def rolling_acceleration_window(arr, wdw, threshold, res=25):
 
 def rolling_immersion_window(arr, wdw, threshold, res=6):
     """
+    Creates a large data set from a rolling window of immersion (wet/dry) and depth records for training a neural net.
 
-    Assumed 6s res for imm and 1s for depth
+    Arguments:
+     - arr: 2-column dask array containing Immersion and Depth records (in that order)
+     - wdw: int specifying window size in seconds
+     - threshold: Depth threshold past which a dive can be said to have occurred
+     - res: immersion data resolution (no. of seconds between each record)
 
-    res - no of seconds between each immersion record
-
-
-    Create huge dset
-    wdw: seconds:
+    Output:
+     - Rolling window dask array with each row consisting of immersion vector followed by binary int indicating whether
+       or not a dive has occurred within that window.
     """
     assert wdw % res == 0, f'Window size must be divisible by {res}'
     if arr.dtype != float:
@@ -113,7 +123,17 @@ def rolling_immersion_window(arr, wdw, threshold, res=6):
 
 
 def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
-    """Builds a 2 layer neural network for binary classification with tf.keras.
+    """
+    Builds a 2-hidden-layer neural network with dropout for binary classification using Keras.
+
+    Arguments:
+     - in_shape: (tuple) shape of input layer
+     - l1_units: (int) no. of units in layer 1
+     - l2_units: (int) no. of units in layer 2
+     - dropout: (float) dropout value for hidden layers
+
+    Output:
+     - Compiled Tensorflow binary classification model
     """
     # Build model
     model = keras.models.Sequential([
