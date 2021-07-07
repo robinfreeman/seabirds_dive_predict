@@ -7,4 +7,10 @@
 
 Rscript extract_GPS.R
 
-Rscript extract_pressure.R
+Rscript extract_depth.R
+
+Rscript plot_depth.R
+
+Rscript extract_GLS.R
+
+Rscript depth_to_immersion.R
