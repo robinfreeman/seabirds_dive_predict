@@ -8,7 +8,7 @@ import pandas as pd
 import dask.dataframe as dd
 from tensorflow.keras.callbacks import ModelCheckpoint
 
-files = glob.glob('../Data/Reduced/ACC*.csv')
+files = glob.glob('../Data/Reduced/ACC6*.csv')
 out_stats = pd.DataFrame(columns=['Accuracy', 'AUC', 'Sensitivity', 'Specificity',
                                   'TruePos (%)', 'FalsePos (%)', 'FalseNeg (%)', 'TrueNeg (%)'])
 
@@ -42,7 +42,7 @@ for f in files:
         model = core.build_binary_classifier(in_shape=X_test[0].shape)
 
         # Train model
-        core.train_classifier(model, train, model_checkpoint=mc)
+        core.train_classifier(model, train, epochs=1, model_checkpoint=mc)
 
         # Evaluate model
         m = model.evaluate(X_test, y_test)
@@ -58,4 +58,4 @@ for f in files:
                           *((conf_matrix/conf_matrix.sum())*100).flatten()]
 
 out_stats.sort_index(ascending=True, axis=0, inplace=True)
-out_stats.to_csv('../Results/Keras_XVal_Metrics.csv', header=True, index=True)
+out_stats.to_csv('../Results/ACC_WindowComp_XVal_Metrics_Keras.csv', header=True, index=True)

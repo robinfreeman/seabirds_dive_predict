@@ -21,7 +21,7 @@ suppressMessages(library(kableExtra))
 cat('\nExtracting GPS data...\n\n')
 
 # Get all CSV files (containing GPS/ACC data)
-files = list.files("../Data/BIOT_DGBP/BIOT_DGBP/", pattern = "1.csv", full.names = TRUE)
+files = list.files("../Data/BIOT_DGBP/BIOT_DGBP/", pattern = "_dep.csv", full.names = TRUE)
 data_list = list()
 
 # Function to extract statistical mode

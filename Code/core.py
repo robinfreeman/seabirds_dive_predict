@@ -12,8 +12,8 @@ import random
 import numpy as np
 import dask.array as da
 import dask.dataframe as dd
-from tensorflow import keras
-from tensorflow.keras.callbacks import EarlyStopping
+#from tensorflow import keras
+from matplotlib import pyplot as plt
 
 
 ## Functions ##
@@ -137,6 +137,8 @@ def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
     Output:
      - Compiled Tensorflow binary classification model
     """
+    from tensorflow import keras  # internal import to enable multiple threads
+
     # Build model
     model = keras.models.Sequential([
         keras.layers.Dense(units=l1_units, input_shape=in_shape, activation='relu'),
@@ -156,7 +158,7 @@ def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
     return model
 
 
-def train_classifier(model, train_data, y_field='Dive', epochs=100, drop=['BirdID'], model_checkpoint=None):
+#def train_classifier(model, train_data, y_field='Dive', epochs=100, drop=['BirdID'], model_checkpoint=None):
     """
 
     :param to_drop:
@@ -164,18 +166,97 @@ def train_classifier(model, train_data, y_field='Dive', epochs=100, drop=['BirdI
     :param model_checkpoint:
     :return:
     """
+"""
+    print(f'Training on {train_data.npartitions} partitions...')
+
     for i in range(train_data.npartitions):
+
+        print(f'\n\nPARTITION {i}\n\n')
 
         train_i = train_data.get_partition(i).compute()  # getting one partition
         X_train = train_i.drop(columns=drop + [y_field]).to_numpy()
         y_train = train_i[y_field].to_numpy()
 
-        es = EarlyStopping(monitor='val_accuracy', mode='max', verbose=1, patience=10, min_delta=0.5)
+        es = EarlyStopping(monitor='accuracy', mode='max', verbose=1, patience=10, min_delta=.005)
 
         try:
-            model.fit(X_train, y_train, validation_split=0.2, epochs=epochs,
-                      verbose=0, callbacks=[es, model_checkpoint] if model_checkpoint else [es])
+            history = model.fit(X_train, y_train, epochs=epochs, verbose=0,
+                                callbacks=[es, model_checkpoint] if model_checkpoint else [es])
         except ValueError:
             continue
 
+        #############################################
+        #from matplotlib import pyplot as plt
+        # summarize history for accuracy
+        plt.plot(history.history['accuracy'])
+        #plt.plot(history.history['loss'])
+        #plt.plot(history.history['val_accuracy'])
+        plt.title('model accuracy')
+        plt.ylabel('accuracy')
+        plt.xlabel('epoch')
+        #plt.legend(['train', 'val'], loc='upper left')
+        plt.show()
+        # summarize history for loss
+        
+        plt.plot(history.history['loss'])
+        #plt.plot(history.history['val_loss'])
+        plt.title('model loss')
+        plt.ylabel('loss')
+        plt.xlabel('epoch')
+        #plt.legend(['train', 'val'], loc='upper left')
+        plt.show()
+        #############################################
+    
+
     return
+"""
+
+
+
+def dask_build_train_evaluate(data, bird, modelpath, y_field='Dive', drop=['BirdID'], epochs=100):
+    """
+
+    :param to_drop:
+    :param train_data:
+    :param model_checkpoint:
+    code_no: code name to go into model name to recognise what it is
+    :return:
+    """
+    from tensorflow.keras.callbacks import EarlyStopping  #, ModelCheckpoint
+
+    # Split data
+    print(f"Withholding bird '{bird}'...")
+    train = data[data.BirdID != bird]
+    test = data[data.BirdID == bird].compute()
+
+    X_test = test.drop(columns=drop + [y_field]).to_numpy()
+    y_test = test.Dive.to_numpy()
+
+    model = build_binary_classifier(in_shape=X_test[0].shape)
+
+    #mc = ModelCheckpoint(f'../Results/{codename}_keras/{bird}_best_model.h5', monitor='accuracy', mode='max', verbose=0,
+    #                     save_best_only=True)
+
+    # Train
+    for i in range(train.npartitions):
+
+        train_i = train.get_partition(i).compute()  # getting one partition
+        X_train = train_i.drop(columns=drop + [y_field]).to_numpy()
+        y_train = train_i.Dive.to_numpy()
+
+        es = EarlyStopping(monitor='accuracy', mode='max', verbose=1, patience=15, min_delta=.005)
+
+        try:
+            model.fit(X_train, y_train, epochs=epochs, verbose=0, callbacks=[es])
+        except ValueError:
+            continue
+
+    # Save and evaluate
+    model.save(modelpath)
+    m = model.evaluate(X_test, y_test, verbose=0)
+
+    # Calculate extra stats
+    conf_matrix = np.array(m[-4:])
+    specificity = conf_matrix[-1] / conf_matrix[2:].sum()
+
+    return [bird, *m[1:4], specificity, *conf_matrix]

@@ -7,14 +7,16 @@ __author__ = 'Luke Swaby (lds20@ic.ac.uk)'
 __version__ = '0.0.1'
 
 ## Imports ##
-
 import core
 import os
 import sys
 import glob
 import re
 import time
+import random
 import argparse
+import numpy as np
+import pandas as pd
 import dask.dataframe as dd
 import dask.array as da
 
@@ -24,25 +26,25 @@ def parse_arguments():
     """Function to parse args from command line
     """
     parser = argparse.ArgumentParser(
-    description="Script for generating large data set for deep learning "
-                "from rolling window of acceleration values..")
+        description="Script for generating large data set for deep learning "
+                    "from rolling window of acceleration values..")
 
     parser.add_argument('-i', dest='indir', type=str,
-                    default='../Data/BIOT_DGBP/',
-                    help='Path to directory containing the raw data')
+                        default='../Data/GLS Data 2019 Jan DG RFB Short-term/matched/',
+                        help='Path to directory containing input data')
     parser.add_argument('-o', dest='out', type=str,
-                    default='../Data/Reduced/ACC_reduced_all_dives.csv',
-                    help='File/directory path for out file(s).')
-    parser.add_argument('-w', dest='window', type=int, default=10,
-                    help='Rolling window width.')
+                        default='../Data/Reduced/IMM_reduced_all_dives.csv',
+                        help='File/directory path for out file(s).')
+    parser.add_argument('-w', dest='window', type=int, default=120,
+                        help='Rolling window width.')
     parser.add_argument('-t', dest='threshold', type=float, default=0.03,
-                    help='Depth threshold for identifying dives.')
-    parser.add_argument('-f', dest='res', type=int, default=25,
-                    help='ACC resolution (Hz).')
+                        help='Depth threshold for identifying dives.')
+    parser.add_argument('-f', dest='res', type=int, default=6,
+                        help='GLS immersion resolution (#seconds between each record).')
     parser.add_argument('-r', dest='reduce', type=bool, default=True,
-                    help='Boolean (True/False) indicating whether or not '
-                         'you want larger dset written to a npy stack '
-                         '(False) or a reduced dset written to csv (True).')
+                        help='Boolean (True/False) indicating whether or not '
+                             'you want larger dset written to a npy stack '
+                             '(False) or a reduced dset written to csv (True).')
 
     args = parser.parse_args()
 
@@ -57,7 +59,7 @@ def parse_arguments():
     return args.indir, args.out, args.window, args.threshold, args.res, args.reduce
 
 
-def main(indir, outpth, wdw=10, threshold=0.03, res=25, reduce=True):
+def main(indir, outpth, wdw=120, threshold=0.03, res=6, reduce=True):
     """
     Creates numpy dataframe by taking a rolling window of 250 rows of the input
     arr and horizontally arranging x, y, and z values followed by a binary
@@ -72,25 +74,28 @@ def main(indir, outpth, wdw=10, threshold=0.03, res=25, reduce=True):
         os.remove(outpth)  # remove file if already exists, otherwise out file will be appended
 
     # Grab list of reevant file paths
-    files = glob.glob(f'{indir}*ACC.csv')
+    files = glob.glob(f'{indir}GLS_x_Depth*.csv')
 
     t_count = 0
     rows = 0
     dives = 0
     non_dives = 0
 
-    for no, file in enumerate(files, 1):
+    for no, f in enumerate(files, 1):
 
         tik = time.time()
 
-        print(f"PROCESSING FILE {no}: '{file}'...")
+        print(f"PROCESSING FILE {no}: '{f}'...")
 
         # Create dset from rolling window
         print('\r\tCreating rolling window dset...')
-        arr = dd.read_csv(file).to_dask_array(lengths=True)
+        df = dd.read_csv(f, usecols=['wet/dry', 'Depth_mod'])
+        conv_nums = {'wet/dry': {'wet': 1, 'dry': 0}}
+        arr = df[['wet/dry', 'Depth_mod']].replace(conv_nums).to_dask_array(lengths=True)
 
-        train_data = core.rolling_acceleration_window(arr, wdw, threshold, res)
-        bird = re.search(r"/(\w+)_ACC.csv", file).group(1)  # bird ID from path
+        train_data = core.rolling_immersion_window(arr, wdw, threshold, res)
+
+        bird = re.search(r"Depth_(\w+).csv", f).group(1)  # bird ID from path
 
         if reduce:
             # Reduce dataset
@@ -127,7 +132,8 @@ def main(indir, outpth, wdw=10, threshold=0.03, res=25, reduce=True):
         non_dives += nd
 
     # Informative output
-    shp = (rows, wdw*res*3+2) if reduce else (rows, wdw*res*3+1)  # no id col if npy
+    # TODO: correct these outputs
+    shp = (rows, wdw*3+2) if reduce else (rows, wdw*3+1)  # no id col if npy
     sys.exit(f"\nDone\n\nTotal time elapsed: %.2fs\n\n"
              f"Outfile stats:\n"
              f"\tShape: {shp}\n"
@@ -137,3 +143,8 @@ def main(indir, outpth, wdw=10, threshold=0.03, res=25, reduce=True):
 
 if __name__ == '__main__':
     main(*parse_arguments())
+
+
+
+#TODO:
+# 1. Are dimensions right for each file? (i.e. 20 for all?) — I think so
