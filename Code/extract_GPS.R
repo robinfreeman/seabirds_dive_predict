@@ -13,6 +13,10 @@ suppressMessages(library(maptools))
 suppressMessages(library(ggplot2))
 suppressMessages(library(plyr))
 suppressMessages(library(kableExtra))
+suppressMessages(library(rnaturalearth))
+suppressMessages(library(ggspatial))
+suppressMessages(library(sf))
+
 
 ## Script ##
 
@@ -44,7 +48,7 @@ for (i in 1:length(files)) {
   
   # Convert date and time to readable format
   datetime_s = paste(ts_data_loc$Date, ts_data_loc$Time)
-  ts_data_loc$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S.000")
+  ts_data_loc$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%OS", tz = "GMT")
   
   cat("\rCalculating distances travelled...")
   
@@ -87,10 +91,11 @@ fwrite(gps_data_df, "../Data/BIOT_DGBP/all_gps_data.csv")
 cat('\nPlotting GPS data...')
 
 # Change birds IDs to numeric factors
-gps_data_df$TagID = factor(as.numeric(factor(gps_data_df$TagID)))
+#gps_data_df$TagID = factor(as.numeric(factor(gps_data_df$TagID)))
+gps_data_df$TagID = as.factor(gps_data_df$TagID)
 
 # Convert datetime strings back to datetimes
-gps_data_df$datetime = as.POSIXct(gps_data_df$datetime)
+#gps_data_df$datetime = as.POSIXct(gps_data_df$datetime)
 
 # Get EEZ shapefile
 eez = readOGR(dsn="../Data/BIOT_DGBP/", layer="eez_noholes", verbose = FALSE)
@@ -120,8 +125,33 @@ g <- ggplot(eez.df, aes(x = long, y = lat, alpha = 0.01)) +
   theme_bw() + 
   theme(panel.background = element_rect(fill = "lightblue"), legend.position = "none", text = element_text(size=10))
 
-print(g)
+#print(g)
 ggsave(g, file="../Plots/chagos_bp_redfoot_map.png", width = 9, height = 9)
+
+
+
+###################################################
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+birds = unique(gps_data_df$TagID)
+chagos = st_read("../Data/BIOT_DGBP/Chagos_v6_land_simple.shp")
+eez = st_read("../Data/BIOT_DGBP/eez_noholes.shp")
+
+g <- ggplot(data = world) + 
+      #annotation_map_tile(type = "osm") +
+      geom_sf(data = eez,  alpha=0.3, linetype = "dashed") +  # MPA
+      geom_sf(data = chagos, colour='gray25', fill = 'gray25', size=0.5) +
+      annotation_scale(location = "bl", width_hint = 0.5) + # scale bar
+      xlab("Longitude") + ylab("Latitude") + 
+      ggtitle("Exclusive Economic Zone of Chagos") +
+      #geom_path(data = gps_data_df, aes(x = `location-lon`, y = `location-lat`), color = TagID, size=0.5) +
+      geom_path(data = gps_data_df, aes(x = `location-lon`, y = `location-lat`, colour=TagID), alpha=.6) +
+      scale_fill_manual(values=rainbow(length(birds))) +
+      annotate(geom = "text", x = 72, y = -4, label = "Exclusive Economic Zone", fontface = "italic", color = "grey22", size = 5, alpha=.5) 
+
+ggsave(g, file="../Plots/all_birds_GPS_plot.png", width = 9, height = 9)
+###################################################
+
 
 cat('\rSaving GPS plots for each bird...')
 

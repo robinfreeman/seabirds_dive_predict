@@ -46,14 +46,15 @@ for (i in 1:nrow(full_dta)){
   # Load data
   gls.f =  gls_files[grepl(gls.id, gls_files, fixed=TRUE)]
   gps.f = dep_files[grepl(gps.id, dep_files, fixed=TRUE)]
-  dta.gls = fread(file = gls.f, drop = c("duration"))
+  dta.gls = fread(file = gls.f)
   dta.gps = fread(file = gps.f, select = c("datetime", "Depth", "Depth_mod"))
+  #TODO: does this last line need to read milliseconds?
   
   # Merge data
   dta_join = left_join(dta.gps, dta.gls, by = "datetime")
   dta_join = dta_join[min(which(!is.na(dta_join$`wet/dry`))):max(which(!is.na(dta_join$`wet/dry`)))]
   
-  fwrite(dta_join, file = paste0(outdir, 'GLS_x_Depth_', gps.id, '_', tolower(gls.id), '.csv'))
+  fwrite(dta_join, file = paste0(outdir, 'IMM_', gps.id, '_', tolower(gls.id), '.csv'))
 }
 
 cat('\nDone!\n')

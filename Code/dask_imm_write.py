@@ -32,8 +32,7 @@ def parse_arguments():
     parser.add_argument('-i', dest='indir', type=str,
                         default='../Data/GLS Data 2019 Jan DG RFB Short-term/matched/',
                         help='Path to directory containing input data')
-    parser.add_argument('-o', dest='out', type=str,
-                        default='../Data/Reduced/IMM_reduced_all_dives.csv',
+    parser.add_argument('-o', dest='out', type=str, required=True,
                         help='File/directory path for out file(s).')
     parser.add_argument('-w', dest='window', type=int, default=120,
                         help='Rolling window width.')

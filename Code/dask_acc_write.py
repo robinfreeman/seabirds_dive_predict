@@ -7,6 +7,7 @@ __author__ = 'Luke Swaby (lds20@ic.ac.uk)'
 __version__ = '0.0.1'
 
 ## Imports ##
+import pandas as pd
 
 import core
 import os
@@ -71,8 +72,9 @@ def main(indir, outpth, wdw=10, threshold=0.03, res=25, reduce=True):
         print(f'Removing outfile: {outpth}')
         os.remove(outpth)  # remove file if already exists, otherwise out file will be appended
 
-    # Grab list of reevant file paths
-    files = glob.glob(f'{indir}*ACC.csv')
+    # Grab list of relevant file paths
+    # TODO: delete '03_S1_'
+    files = glob.glob(f'{indir}*03_S1_ACC.csv')
 
     t_count = 0
     rows = 0

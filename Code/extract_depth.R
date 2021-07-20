@@ -12,10 +12,8 @@ suppressMessages(library(sp))
 ## Global variables
 threshold = 0.03
 
-diego.garcia = data.frame(c(72.420231, 72.453459, 72.457886, 72.500819, 72.500642, 72.483256, 
-                            72.483433, 72.507307, 72.429940, 72.409344, 72.420786, 72.343269), 
-                          c(-7.219409, -7.239153, -7.260946, -7.293678, -7.314442, -7.335030, 
-                            -7.358431, -7.380312, -7.457893, -7.437472, -7.343578, -7.270662))
+chagos = read_sf("../Data/BIOT_DGBP/Chagos_v6_land_simple.shp")
+diego.garcia = st_coordinates(tail(chagos$geometry, 1))[, c('X', 'Y')]
 colnames(diego.garcia) = c('lon', 'lat')
 
 # Get all Pressure files (containing Pressure/activity data)
@@ -38,7 +36,7 @@ for (i in 1:length(files)) {
   # convert date and time to readable format
   cat("\rConverting times to readable format...")
   datetime_s = paste(ts_data$Date, ts_data$Time)
-  ts_data$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S.000")
+  ts_data$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%OS", tz = "GMT")
   
   # Subset depth data
   ts_data_d = ts_data[!is.na(Depth)]
@@ -47,8 +45,8 @@ for (i in 1:length(files)) {
   ################### TRIM DATA BEFORE FIRST DEPARTURE AND AFTER LAST RETURN #######
   loc_data = ts_data_d[!is.na(`location-lon`)]
   
-  home.or.away = point.in.polygon(loc_data$`location-lon`, loc_data$`location-lat`
-                                  , diego.garcia$lon, diego.garcia$lat, 
+  home.or.away = point.in.polygon(loc_data$`location-lon`, loc_data$`location-lat`, 
+                                  diego.garcia[,'lon'], diego.garcia[,'lat'], 
                                   mode.checked=FALSE)
   
   start = loc_data$datetime[min(which(home.or.away == 0))]  # time of first departure
@@ -57,8 +55,7 @@ for (i in 1:length(files)) {
   # Trim datasets
   ts_data_d = ts_data_d[datetime > start & datetime < finish]
   ts_data = ts_data[which(ts_data$datetime==(start+1)):which(ts_data$datetime==(finish-1))]
-  ###################################################################################
-  
+
   ################ INTERPOLATE GPS #####################
   # Note number of GPS rows and their indexes
   cat("\rInterpolating GPS...")
@@ -137,9 +134,9 @@ for (i in 1:length(files)) {
   data_list[[i]] = ts_data_d
   
   # Acc data for ANN training
-  cat("Writing out:")
-  cat(paste0('../Data/BIOT_DGBP/', this_bird, '_ACC.csv'))
-  fwrite(ts_data %>% select(X, Y, Z, Depth_mod), file = paste0('../Data/BIOT_DGBP/', this_bird, '_ACC.csv'))
+  #cat("Writing out:")
+  cat(paste0('Writing out: ../Data/BIOT_DGBP/ACC_', this_bird, '.csv'))
+  fwrite(ts_data %>% select(datetime, X, Y, Z, Depth_mod), file = paste0('../Data/BIOT_DGBP/ACC_', this_bird, '.csv'), dateTimeAs = "ISO")
   
   ################# SUMMARY STATS ##################
   dist.dta = fread(file = gsub(".csv", "_loc.csv", f), select = c('datetime', 'dist_to_dg_km', 'dist_moved_m')) %>%

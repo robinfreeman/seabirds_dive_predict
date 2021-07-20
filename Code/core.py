@@ -10,6 +10,7 @@ __version__ = '0.0.1'
 
 import random
 import numpy as np
+import pandas as pd
 import dask.array as da
 import dask.dataframe as dd
 #from tensorflow import keras
@@ -55,8 +56,11 @@ def reduce_dset(data):
     # Stack, shuffle and compute
     data_add = dd.from_dask_array(da.vstack((pos, neg))).compute()
     data_add = data_add.sample(frac=1)
-    data_add.columns = [*data_add.columns[:-1], 'Dive']  # rename last col
-    data_add['Dive'] = data_add['Dive'].astype(int)
+    data_add.columns = ['datetime', *data_add.columns[1:-1], 'Dive']  # rename first and last cols
+
+    # Change dtypes
+    data_add.Dive = data_add.Dive.astype(int)
+    data_add.datetime = pd.to_datetime(data_add.datetime)
 
     return data_add
 
@@ -79,14 +83,20 @@ def rolling_acceleration_window(arr, wdw, threshold, res=25):
     # assert wdw % res == 0, f'Window size must be divisible by {res} for {res}Hz ACC data'
 
     wdw *= res  # expand resolution to no. of rows
+    time = arr[:-(wdw-1), 0]  # extract time col
+    arr_tmp = arr[:, 1:].astype(float)
 
-    x = da.lib.stride_tricks.sliding_window_view(arr[:, 0], wdw)
-    y = da.lib.stride_tricks.sliding_window_view(arr[:, 1], wdw)
-    z = da.lib.stride_tricks.sliding_window_view(arr[:, 2], wdw)
-    depth = da.lib.stride_tricks.sliding_window_view(arr[:, 3], wdw)
-
+    x = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 0], wdw)
+    y = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 1], wdw)
+    z = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 2], wdw)
+    depth = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 3], wdw)
     d = da.apply_along_axis(check_for_dive, 1, depth, threshold)
-    train_data = da.hstack((x, y, z, d.reshape((d.shape[0], 1))))
+
+    # reshape column vectors
+    time = time.reshape((time.shape[0], 1))
+    d = d.reshape((d.shape[0], 1))
+
+    train_data = da.hstack((time, x, y, z, d))
 
     train_data.compute_chunk_sizes()
 
@@ -108,16 +118,21 @@ def rolling_immersion_window(arr, wdw, threshold, res=6):
        or not a dive has occurred within that window.
     """
     assert wdw % res == 0, f'Window size must be divisible by {res}'
-    if arr.dtype != float:
-        arr = arr.astype(float)
 
-    imm = da.lib.stride_tricks.sliding_window_view(arr[:, 0], wdw)
+    time = arr[:-(wdw - 1), 0]  # extract time col
+    arr_tmp = arr[:, 1:].astype(float)
+
+    imm = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 0], wdw)
     imm = da.apply_along_axis(lambda a: a[~da.isnan(a)], 1, imm)
 
-    depth = da.lib.stride_tricks.sliding_window_view(arr[:, 1], wdw)
+    depth = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 1], wdw)
     d = da.apply_along_axis(check_for_dive, 1, depth, threshold)
 
-    train_data = da.hstack((imm, d.reshape((d.shape[0], 1))))
+    # reshape column vectors
+    time = time.reshape((time.shape[0], 1))
+    d = d.reshape((d.shape[0], 1))
+
+    train_data = da.hstack((time, imm, d))
 
     train_data.compute_chunk_sizes()
 
@@ -213,7 +228,7 @@ def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
 
 
 
-def dask_build_train_evaluate(data, bird, modelpath, y_field='Dive', drop=['BirdID'], epochs=100):
+def dask_build_train_evaluate(data, bird, modelpath, y_field='Dive', drop=['BirdID', 'datetime'], epochs=100):
     """
 
     :param to_drop:
@@ -260,3 +275,43 @@ def dask_build_train_evaluate(data, bird, modelpath, y_field='Dive', drop=['Bird
     specificity = conf_matrix[-1] / conf_matrix[2:].sum()
 
     return [bird, *m[1:4], specificity, *conf_matrix]
+
+
+def generate_predictions(modelpath, data, y_field='Dive', drop=['BirdID', 'datetime'], add_ID_col = True):
+    """
+
+    :param modelpath:
+    :param data:
+    :return: 3 column dataframe BirdID datetime Predictions
+
+    - assumes balanced dset
+
+    """
+    # modelpath = '../Results/Reduced/Keras_ACC_XVal_Results/ACC_2_Keras/ch_gps03_S1_withheld.h5'
+
+    from tensorflow import keras  # internal import to enable multiple threads
+    #from sklearn.metrics import roc_curve
+
+    # Split data
+    model = keras.models.load_model(modelpath)
+    X_test = data.drop(columns=drop + [y_field]).to_numpy()
+    #y_test = data[y_field]
+
+    # Calculate optimal threshold
+    # TODO: THIS CAN'T BE USED FOR BIRDS FOR WHICH NO DIVE COLUMN IS AVAILABLE!, STICK WITH 0.5...
+    #fpr, tpr, thresholds = roc_curve(y_test, model.predict(X_test))
+    #gmeans = np.sqrt(tpr * (1 - fpr))  # calculate the g-mean for each threshold
+    #ix = np.argmax(gmeans)
+    #threshold = thresholds[ix]
+
+    # Calculate predictions
+    y_pred = (model.predict(X_test) > 0.5).astype(int).flatten()
+
+    if add_ID_col:
+        out_df = pd.DataFrame(zip(data.BirdID, data.datetime, y_pred), columns=['BirdID', 'datetime', 'Prediction'])
+    else:
+        out_df = pd.DataFrame(zip(data.datetime, y_pred), columns=['datetime', 'Prediction'])
+
+    return out_df
+
+

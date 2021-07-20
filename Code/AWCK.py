@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import multiprocessing
 import dask.dataframe as dd
-from tensorflow.keras.callbacks import ModelCheckpoint
+#from tensorflow.keras.callbacks import ModelCheckpoint
 import argparse
 
 def parse_arguments():
@@ -19,6 +19,8 @@ def parse_arguments():
 
     parser.add_argument('-i', dest='indir', type=str, default='../Data/Reduced/',
                         help='Path to directory containing in files.')
+    parser.add_argument('-o', dest='outdir', type=str, default='../Results/',
+                        help='Path to directory for out files.')
     parser.add_argument('-t', dest='dtype', type=str, choices=['ACC', 'IMM'], required=True,
                         help='Data sets to analyse (ACC/IMM).')
     parser.add_argument('-y', dest='ycol', type=str, default='Dive', help='Y column')
@@ -31,17 +33,19 @@ def parse_arguments():
 
     print(f'PARAMS USED:\n'
           f'indir:\t{args.indir}\n'
+          f'indir:\t{args.outdir}\n'
           f'dtype:\t{args.dtype}\n'
           f'y_col:\t{args.ycol}s\n'
           f'drop:\t{args.drop}\n'
           f'epochs:\t{args.epochs}')
 
-    return args.indir, args.dtype, args.ycol, args.drop, args.epochs
+    return args.indir, args.outdir, args.dtype, args.ycol, args.drop, args.epochs
 
 
-def main(indir, dtype, ycol, drop, epochs):
+def main(indir, outdir, dtype, ycol, drop, epochs):
 
     assert indir.endswith('/'), 'indir arg must end with a forward slash'
+    assert outdir.endswith('/'), 'outdir arg must end with a forward slash'
 
     # DataFrame for out stats
     metrics = ['Accuracy', 'AUC', 'Sensitivity', 'Specificity',
@@ -50,7 +54,7 @@ def main(indir, dtype, ycol, drop, epochs):
 
     # Parse files
     #TODO: remove 2 from below string
-    files = glob.glob(f'{indir}{dtype}*.csv')
+    files = glob.glob(f'{indir}{dtype}.csv')
 
     for f in files:
 
@@ -60,24 +64,22 @@ def main(indir, dtype, ycol, drop, epochs):
         wdw = re.search(fr"/{dtype}(\d+)_reduced", f).group(1)
         data = dd.read_csv(f)
 
-        # Save best model for each window size
-        #mc = ModelCheckpoint(f'../Results/ACC_{wdw}_best_model.h5', monitor='val_accuracy', mode='max', verbose=0,
-        #                     save_best_only=True)
+        birds = set(data.BirdID)
 
         # Train a model for each bird withheld for testing
         with multiprocessing.Pool() as pool:
-            rows = pool.starmap(core.dask_build_train_evaluate,
-                                [(data, bird, f'../Results/{dtype}_{wdw}_Keras/{bird}_withheld.h5',
-                                  ycol, drop, epochs) for bird in set(data.BirdID)])
+            metrics = pool.starmap(core.dask_build_train_evaluate,
+                                [(data, bird, f'{outdir}{dtype}_{wdw}_Keras/{bird}_withheld.h5',
+                                  ycol, drop, epochs) for bird in birds])
 
-        Xval_metrics = pd.DataFrame(rows, columns=['BirdID', *metrics])
+        Xval_metrics = pd.DataFrame(metrics, columns=['BirdID', *metrics])
 
         # Convert confusion matrix stats to percentages
         conf_temp = Xval_metrics.iloc[:, -4:].to_numpy()
         Xval_metrics.iloc[:, -4:] = (conf_temp / conf_temp.sum(axis=1, keepdims=True)) * 100
 
         # Save metrics for current window size
-        Xval_metrics.to_csv(f'../Results/{dtype}_{wdw}_xval_metrics_keras.csv', header=True, index=False)
+        Xval_metrics.to_csv(f'{outdir}{dtype}_{wdw}_xval_metrics_keras.csv', header=True, index=False)
 
         # Aggeragate stats
         mean_stats = Xval_metrics.iloc[:, 1:5].mean(axis=0)
@@ -85,6 +87,15 @@ def main(indir, dtype, ycol, drop, epochs):
         conf_total = (conf_total / conf_total.sum()) * 100
 
         out_stats.loc[wdw] = [*mean_stats, *conf_total]
+
+        # Generate predictions
+        with multiprocessing.Pool() as pool:
+            preds = pool.starmap(core.generate_predictions, [(f'{outdir}{dtype}_{wdw}_Keras/{bird}_withheld.h5',
+                                                              data[data.BirdID == bird].compute(),
+                                                              ycol, drop, True) for bird in birds])
+
+        predictions = pd.concat(preds)
+        predictions.to_csv(f'{outdir}{dtype}_{wdw}_xval_predictions.csv', header=True, index=False)
 
     out_stats.sort_index(ascending=True, axis=0, inplace=True)
     out_stats.index.name = 'Window Size (s)'

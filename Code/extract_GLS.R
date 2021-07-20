@@ -11,7 +11,7 @@ suppressMessages(library(dplyr))
 suppressMessages(library(ggplot2))
 
 # Get all Pressure files (containing Pressure/activity data)
-cat('\nExtracting pressure data...\n\n')
+cat('\nExtracting GLS data...\n\n')
 dir = "../Data/GLS Data 2019 Jan DG RFB Short-term/matched/"
 im_files = list.files(dir, pattern = "T.deg", full.names = TRUE)
 lux_files = list.files(dir, pattern = "T.lux", full.names = TRUE)
@@ -31,7 +31,7 @@ for (i in 1:length(files)){
   
   cat(sprintf("Processing files for: '%s'\n", this_bird))
   
-  # Read in file and subset rows containing immersion data
+  # Read in files
   im_data = fread(file = paste0(f, '.deg'))
   lux_data = fread(file = paste0(f, '.lux'))
   
