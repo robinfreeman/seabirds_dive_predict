@@ -18,7 +18,7 @@ diego.garcia = st_coordinates(tail(chagos$geometry, 1))[, c('X', 'Y')]
 colnames(diego.garcia) = c('lon', 'lat')
 
 # Get all Pressure files (containing Pressure/activity data)
-cat('\nExtracting pressure data...\n\n')
+cat('\nExtracting data...\n\n')
 files = list.files("../Data/BIOT_DGBP/BIOT_DGBP/", pattern = "1.csv", full.names = TRUE)
 gps_data_list = list()
 depth_data_list = list()
@@ -41,12 +41,9 @@ for (i in 1:length(files)) {
   # Read in file and subset rows containing depth data
   ts_data = fread(file = f)
   
-  # Subset
+  # Index
   ts_data$ix = 1:nrow(ts_data)
-  ts_data_d = ts_data[!is.na(Depth) & Depth < 10]  # remove erroneous depth readings
-  ts_data_loc = ts_data_d[!is.na(`location-lon`)]
-  
-  this_bird = unique(ts_data_loc$TagID)  # extract bird ID
+  this_bird = unique(ts_data$TagID)  # extract bird ID
   
   # convert date and time to readable format
   #cat("\rConverting times to readable format...")
@@ -59,6 +56,8 @@ for (i in 1:length(files)) {
   #this_bird = unique(ts_data_d$TagID)
 
   ################### TRIM DATA BEFORE FIRST DEPARTURE AND AFTER LAST RETURN #######
+  ts_data_loc = ts_data[!is.na(`location-lon`)]
+  
   home.or.away = point.in.polygon(ts_data_loc$`location-lon`, ts_data_loc$`location-lat`, 
                                   diego.garcia[,'lon'], diego.garcia[,'lat'], 
                                   mode.checked=FALSE)
@@ -66,10 +65,12 @@ for (i in 1:length(files)) {
   start = ts_data_loc$ix[min(which(home.or.away == 0))]  # ix of first departure
   finish = ts_data_loc$ix[max(which(home.or.away == 0))]  # ix of last return
   
-  # Trim
-  ts_data_loc = ts_data_loc %>% filter(ix > start & ix < finish)
-  ts_data_d = ts_data_d %>% filter(ix > start & ix < finish)
-  ts_data = ts_data %>% filter(ix > start & ix < finish)
+  # Trim and subset
+  ts_data = ts_data[ix > start & ix < finish]
+  ts_data_d = ts_data[!is.na(Depth)]
+  ts_data_loc = ts_data[!is.na(`location-lon`)]
+  
+  # TODO: REINDEX HERE (I.E. START FROM 1 AGAIN)
   
   ################ INTERPOLATE GPS IN DEPTH #####################
   # Note number of GPS rows and their indexes

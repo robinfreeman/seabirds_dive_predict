@@ -56,14 +56,73 @@ def reduce_dset(data):
     # Stack, shuffle and compute
     data_add = dd.from_dask_array(da.vstack((pos, neg))).compute()
     data_add = data_add.sample(frac=1)
-    data_add.columns = ['datetime', *data_add.columns[1:-1], 'Dive']  # rename first and last cols
+    data_add.columns = ['IX', *data_add.columns[1:-1], 'Dive']  # rename first and last cols
 
     # Change dtypes
     data_add.Dive = data_add.Dive.astype(int)
-    data_add.datetime = pd.to_datetime(data_add.datetime)
+    data_add.IX = data_add.IX.astype(int)
+
+    #data_add.datetime = pd.to_datetime(data_add.datetime)
 
     return data_add
 
+"""
+def reduce_dset_dask(data, outfmt):
+
+    assert outfmt in ['dask', 'pandas'], "outfmt must be one of 'dask'/'pandas'"
+
+    # Sample all dives
+    dive_ix = da.where(data[:, -1] == 1)[0].compute()
+    pos = data[dive_ix]
+    n_dive = len(dive_ix)
+
+    # Sample non-dives
+    no_dive_ix = np.setdiff1d(np.arange(data.shape[0]), dive_ix)
+    n_no_dive = random.randint(n_dive, round(n_dive * 1.1))
+    neg = data[da.random.choice(no_dive_ix, n_no_dive, replace=False)]
+
+    ######
+    stacked = da.vstack((pos, neg))
+    data = stacked[:, 1:].astype(float).compute()
+    datetime = pd.to_datetime(dd.from_dask_array(stacked[:, 0]).compute())
+
+    data_add = dd.from_dask_array(stacked).compute()
+    #######
+
+    # Stack, shuffle and compute
+    if compute:
+        data_add = dd.from_dask_array(data_add).compute()
+        data_add = data_add.sample(frac=1)
+        data_add.columns = ['datetime', *data_add.columns[1:-1], 'Dive']  # rename first and last cols
+
+        # Change dtypes
+        data_add.Dive = data_add.Dive.astype(int)
+        data_add.datetime = pd.to_datetime(data_add.datetime)
+
+    else:
+        data_add = dd.from_dask_array(da.vstack((pos, neg)))
+        N = n_dive + n_no_dive
+        data_add['index'] = dd.from_array(np.random.choice(N, N, replace=False))
+        data_add = data_add[['index', *data_add.columns[:-1]]]  # rearrange cols
+
+        data_add.columns = ['Index', 'datetime', *data_add.columns[2:-1], 'Dive']  # rename first and last cols
+
+        # Change dtypes
+        data_add.Dive = data_add.Dive.astype(int)
+        data_add.datetime = dd.to_datetime(data_add.datetime)
+
+        # change dtypes of all numeric columns to float
+        cols = [str(x) for x in data_add.columns if isinstance(x, int)]
+        data_add.columns = data_add.columns.map(str)
+        for col in cols:
+            data_add[col] = data_add[col].astype(float)
+
+        #data_add.loc[:, numcols] = data_add.loc[:, numcols].astype(float)
+
+        #data_add = data_add.set_index('index', sorted=True)
+
+    return data_add
+"""
 
 def rolling_acceleration_window(arr, wdw, threshold, res=25):
     """
