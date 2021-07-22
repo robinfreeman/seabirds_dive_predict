@@ -46,6 +46,7 @@ for (i in 1:length(files)) {
   ts_data_d = ts_data[!is.na(Depth) & Depth < 10]  # remove erroneous depth readings
   ts_data_loc = ts_data_d[!is.na(`location-lon`)]
   
+  this_bird = unique(ts_data_loc$TagID)  # extract bird ID
   
   # convert date and time to readable format
   #cat("\rConverting times to readable format...")
