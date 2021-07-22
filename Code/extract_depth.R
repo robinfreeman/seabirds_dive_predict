@@ -8,6 +8,7 @@ suppressMessages(library(data.table))
 suppressMessages(library(dplyr))
 suppressMessages(library(geosphere))
 suppressMessages(library(sp))
+suppressMessages(library(sf))
 
 ## Global variables
 threshold = 0.03
@@ -19,8 +20,15 @@ colnames(diego.garcia) = c('lon', 'lat')
 # Get all Pressure files (containing Pressure/activity data)
 cat('\nExtracting pressure data...\n\n')
 files = list.files("../Data/BIOT_DGBP/BIOT_DGBP/", pattern = "1.csv", full.names = TRUE)
-data_list = list()
+gps_data_list = list()
+depth_data_list = list()
 sum_stats = list()
+
+# Function to extract statistical mode
+getmode <- function(v) {
+  uniqv <- unique(na.omit(v))
+  uniqv[which.max(tabulate(match(v, uniqv)))]
+}
 
 # For each file, extract pressure data and resave as *_p.csv
 for (i in 1:length(files)) {
@@ -33,34 +41,42 @@ for (i in 1:length(files)) {
   # Read in file and subset rows containing depth data
   ts_data = fread(file = f)
   
+  # Subset
+  ts_data$ix = 1:nrow(ts_data)
+  ts_data_d = ts_data[!is.na(Depth) & Depth < 10]  # remove erroneous depth readings
+  ts_data_loc = ts_data_d[!is.na(`location-lon`)]
+  
+  
   # convert date and time to readable format
-  cat("\rConverting times to readable format...")
-  datetime_s = paste(ts_data$Date, ts_data$Time)
-  ts_data$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%OS", tz = "GMT")
+  #cat("\rConverting times to readable format...")
+  #datetime_s = paste(ts_data$Date, ts_data$Time)
+  #ts_data$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%OS", tz = "GMT")
   
   # Subset depth data
-  ts_data_d = ts_data[!is.na(Depth)]
-  this_bird = unique(ts_data_d$TagID)
+  #ts_data_d = ts_data[!is.na(Depth)]
+  #ts_data_d = ts_data_d[Depth<10] # remove erroneous records
+  #this_bird = unique(ts_data_d$TagID)
 
   ################### TRIM DATA BEFORE FIRST DEPARTURE AND AFTER LAST RETURN #######
-  loc_data = ts_data_d[!is.na(`location-lon`)]
-  
-  home.or.away = point.in.polygon(loc_data$`location-lon`, loc_data$`location-lat`, 
+  home.or.away = point.in.polygon(ts_data_loc$`location-lon`, ts_data_loc$`location-lat`, 
                                   diego.garcia[,'lon'], diego.garcia[,'lat'], 
                                   mode.checked=FALSE)
   
-  start = loc_data$datetime[min(which(home.or.away == 0))]  # time of first departure
-  finish = loc_data$datetime[max(which(home.or.away == 0))]  # time of last return
+  start = ts_data_loc$ix[min(which(home.or.away == 0))]  # ix of first departure
+  finish = ts_data_loc$ix[max(which(home.or.away == 0))]  # ix of last return
   
-  # Trim datasets
-  ts_data_d = ts_data_d[datetime > start & datetime < finish]
-  ts_data = ts_data[which(ts_data$datetime==(start+1)):which(ts_data$datetime==(finish-1))]
-
-  ################ INTERPOLATE GPS #####################
+  # Trim
+  ts_data_loc = ts_data_loc %>% filter(ix > start & ix < finish)
+  ts_data_d = ts_data_d %>% filter(ix > start & ix < finish)
+  ts_data = ts_data %>% filter(ix > start & ix < finish)
+  
+  ################ INTERPOLATE GPS IN DEPTH #####################
   # Note number of GPS rows and their indexes
-  cat("\rInterpolating GPS...")
+  cat("\rInterpolating GPS coords in depth data...")
   
   gps_idx = which(!is.na(ts_data_d$`location-lon`))
+  
+  #gps_idx = which(!is.na(ts_data_d$`location-lon`))
 
   diffs = diff(gps_idx)
   # 1. Find gps_indexes between which to interpolate
@@ -103,57 +119,100 @@ for (i in 1:length(files)) {
   ts_data$Depth_mod = NA
   dep_idx = which(!is.na(ts_data$Depth))
   ts_data$Depth_mod[dep_idx] = new_series
-  #fwrite(ts_data, file=f)
 
   ############ MAX/MEAN DEPTH ############
-  cat("\rAdding cols containing max/mean depth around GPS records...")
+  cat("\rAdding cols containing max/mean depth around GPS records in depth data...")
   
   # New cols for dive profile assignment
-  ts_data_d$Dive = ts_data_d$Max_depth_m = ts_data_d$Mean_depth_m = NA
+  ts_data_d$Max_depth_m = ts_data_d$Mean_depth_m = NA
+  #ts_data_d$Dive = NA    # can just analyse depth_mod col later
   
-  wndow = 15
+  ## Midpoints
+  mid.points = round(zoo::rollmean(gps_idx, 2))
+  wdws = c(1, mid.points, nrow(ts_data_d))
   
-  # Assign dive profiles based on deepest/mean depth within 15s of GPS record
-  deepest = sapply(gps_idx, function(i) max(ts_data_d$Depth_mod[(i-wndow):(i+wndow)]))
-  deepest[is.na(deepest)] = 0 # last value will be NA as there aren't 30 rows past it
-  
-  mean_depth = sapply(gps_idx, function(i) mean(ts_data_d$Depth_mod[(i-wndow):(i+wndow)]))
-  mean_depth[is.na(mean_depth)] = 0 # last value will be NA as there aren't 30 rows past it
-  
-  dives = sapply(deepest, function(x) x>threshold)
+  deepest = sapply(1:(length(wdws)-1), function(i) max(ts_data_d$Depth_mod[wdws[i]:wdws[i+1]]))
+  mean_depth = sapply(1:(length(wdws)-1), function(i) mean(ts_data_d$Depth_mod[wdws[i]:wdws[i+1]]))
+
+  #dives = sapply(deepest, function(x) x>threshold)
   
   # Load into new cols
   ts_data_d$Max_depth_m[gps_idx] = deepest
   ts_data_d$Mean_depth_m[gps_idx] = mean_depth
-  ts_data_d$Dive[gps_idx] = dives # these signify whether a single depth value exceeds threshold in window around GPS record
+  #ts_data_d$Dive[gps_idx] = dives # these signify whether a single depth value exceeds threshold in window around GPS record
+  
+  
+  
+  ##############################################################################
+  ####################################  GPS  ###################################
+  ##############################################################################
+  
+  # Convert date and time to readable format
+  datetime_s = paste(ts_data_loc$Date, ts_data_loc$Time)
+  ts_data_loc$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%OS", tz = "GMT")
+  
+  cat("\rCalculating distances travelled...")
+  
+  # Determine nest coordinates (as the most common GPS)
+  nest_coords = c(getmode(ts_data_loc$`location-lon`), getmode(ts_data_loc$`location-lat`))
+  
+  # work out dists from nest
+  ts_data_loc$dist_to_dg_m = distHaversine(nest_coords, cbind(ts_data_loc$`location-lon`, ts_data_loc$`location-lat`))
+  ts_data_loc$dist_to_dg_km = ts_data_loc$dist_to_dg_m/1000
+  
+  # Initialise cols
+  ts_data_loc$dist_moved_m = ts_data_loc$time_diff_s = 0
+
+  n = nrow(ts_data_loc)
+  
+  # Calculate distance moved and time taken between each data point
+  ts_data_loc$dist_moved_m[-1] = distHaversine(cbind(ts_data_loc$`location-lon`[-n], ts_data_loc$`location-lat`[-n]), cbind(ts_data_loc$`location-lon`[-1], ts_data_loc$`location-lat`[-1]))
+  ts_data_loc$time_diff_s[-1] = diff(ts_data_loc$datetime)
+  
+  # Calculate speed
+  ts_data_loc$calc_sp_ms = ts_data_loc$dist_moved_m/ts_data_loc$time_diff_s
+  
+  ##############################################################################
+  ##############################################################################
+  ##############################################################################
+  
+  
   
   ################## WRITE FILES ###################
-  cat("\rWriting out files...")
+  cat("\rWriting GPS file...")
+  fwrite(ts_data_loc, gsub(".csv", "_loc.csv", f)) 
+  gps_data_list[[i]] = ts_data_loc
+  
+  cat("\rWriting depth file...")
   # Write depth data frame to out file and add to data_list
   fwrite(ts_data_d, gsub(".csv", "_dep.csv", f)) # write out file
-  data_list[[i]] = ts_data_d
+  depth_data_list[[i]] = ts_data_d
   
-  # Acc data for ANN training
-  #cat("Writing out:")
-  cat(paste0('Writing out: ../Data/BIOT_DGBP/ACC_', this_bird, '.csv'))
-  fwrite(ts_data %>% select(datetime, X, Y, Z, Depth_mod), file = paste0('../Data/BIOT_DGBP/ACC_', this_bird, '.csv'), dateTimeAs = "ISO")
+  cat("\rWriting ACC file...")
+  fwrite(ts_data %>% select(ix, X, Y, Z, Depth_mod), file = paste0('../Data/BIOT_DGBP/ACC_', this_bird, '.csv'))
   
-  ################# SUMMARY STATS ##################
-  dist.dta = fread(file = gsub(".csv", "_loc.csv", f), select = c('datetime', 'dist_to_dg_km', 'dist_moved_m')) %>%
-    filter(datetime >= start & datetime <= finish)
+  
+  # time span
+  #datetime.rng = paste(ts_data[c(start, finish)]$Date, ts_data[c(start, finish)]$Time)
+  #t.span = as.POSIXct(datetime.rng, format = "%d/%m/%Y %H:%M:%OS", tz = "GMT")
   
   # TODO: 
   cat("\rCalculating summary stats...")
-  tot_time = as.numeric(finish-start)
-  tot_dist = sum(dist.dta$dist_moved_m)/1000
-  max_dist = max(dist.dta$dist_to_dg_km, na.rm = TRUE)
+  tot_obs = nrow(ts_data)
+  tot_time = as.numeric(ts_data_loc$datetime[nrow(ts_data_loc)]-ts_data_loc$datetime[1])
+  tot_dist = sum(ts_data_loc$dist_moved_m)/1000
+  max_dist = max(ts_data_loc$dist_to_dg_km, na.rm = TRUE)
   max_depth = max(ts_data_d$Depth)
   mean_depth = mean(ts_data_d$Depth)
   div = sum(ts_data_d$Depth_mod>threshold)
   non_div = nrow(ts_data_d)-div
   
-  sum_stats[[this_bird]] = round(c(tot_time, tot_dist, max_dist, max_depth, 
-                             mean_depth, div, non_div), 2)
+  # Total time
+  # Total dist travelled
+  # Dives
+  
+  sum_stats[[this_bird]] = round(c(tot_obs, tot_time, tot_dist, max_dist, 
+                                   max_depth, mean_depth, div, non_div), 2)
   
   cat("\rDone!\n")
 }
@@ -161,13 +220,20 @@ for (i in 1:length(files)) {
 # Summary stats
 cat("\nWriting summary stats...")
 sumz = as.data.frame(t(data.frame(sum_stats)))
-colnames(sumz) = c('Time Tracked (days)', 'Total Distance Travelled (km)', 'Max Distance Travelled (km)', 'Max Depth (m)', 
+colnames(sumz) = c('Total observations', 'Time Tracked (days)', 'Total Distance Travelled (km)', 'Max Distance Travelled (km)', 'Max Depth (m)', 
                    'Mean Depth (m)', 'Dives', 'Non-dives')
 sumz = cbind(BirdID = rownames(sumz), sumz)
-write.csv(sumz, file = '../Data/summary_stats.csv', row.names = FALSE)
+write.csv(sumz, file = '../Data/BIOT_DGBP/summary_stats.csv', row.names = FALSE)
+
+# Save all GPS data in one file
+cat("\rWriting depth data file...")
+gps_data_df = rbindlist(gps_data_list)
+save(gps_data_df, file = "../Data/BIOT_DGBP/gps_data_df.RData")
+fwrite(gps_data_df, "../Data/BIOT_DGBP/all_gps_data.csv")
 
 # Save all depth data in one file
-cat("\nWriting depth data file...")
-d_data_df = rbindlist(data_list)
+cat("\rWriting depth data file...")
+d_data_df = rbindlist(depth_data_list)
 fwrite(d_data_df, file = "../Data/BIOT_DGBP/all_d_data.csv")
+
 cat("\rDONE!")
