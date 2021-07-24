@@ -24,7 +24,7 @@ def parse_arguments():
     parser.add_argument('-t', dest='dtype', type=str, choices=['ACC', 'IMM'], required=True,
                         help='Data sets to analyse (ACC/IMM).')
     parser.add_argument('-y', dest='ycol', type=str, default='Dive', help='Y column')
-    parser.add_argument('-d', dest='drop', nargs='+', default=['BirdID'],
+    parser.add_argument('-d', dest='drop', nargs='+', default=['BirdID', 'ix'],
                         help='Additional columns (except y column) to drop from training set')
     parser.add_argument('-e', dest='epochs', type=int, default=100,
                         help='Max no. of epochs to train each model.')
@@ -33,7 +33,7 @@ def parse_arguments():
 
     print(f'PARAMS USED:\n'
           f'indir:\t{args.indir}\n'
-          f'indir:\t{args.outdir}\n'
+          f'outdir:\t{args.outdir}\n'
           f'dtype:\t{args.dtype}\n'
           f'y_col:\t{args.ycol}s\n'
           f'drop:\t{args.drop}\n'
@@ -53,8 +53,7 @@ def main(indir, outdir, dtype, ycol, drop, epochs):
     out_stats = pd.DataFrame(columns=metrics)
 
     # Parse files
-    #TODO: remove 2 from below string
-    files = glob.glob(f'{indir}{dtype}.csv')
+    files = glob.glob(f'{indir}{dtype}*.csv')
 
     for f in files:
 
@@ -68,11 +67,11 @@ def main(indir, outdir, dtype, ycol, drop, epochs):
 
         # Train a model for each bird withheld for testing
         with multiprocessing.Pool() as pool:
-            metrics = pool.starmap(core.dask_build_train_evaluate,
-                                [(data, bird, f'{outdir}{dtype}_{wdw}_Keras/{bird}_withheld.h5',
-                                  ycol, drop, epochs) for bird in birds])
+            m = pool.starmap(core.dask_build_train_evaluate,
+                             [(data, bird, f'{outdir}{dtype}_{wdw}_Keras/{bird}_withheld.h5',
+                               ycol, drop, epochs) for bird in birds])
 
-        Xval_metrics = pd.DataFrame(metrics, columns=['BirdID', *metrics])
+        Xval_metrics = pd.DataFrame(m, columns=['BirdID', *metrics])
 
         # Convert confusion matrix stats to percentages
         conf_temp = Xval_metrics.iloc[:, -4:].to_numpy()

@@ -1,4 +1,4 @@
-# Author: Luke Swaby (lds20@ic.ac.uk)
+rm# Author: Luke Swaby (lds20@ic.ac.uk)
 # Script: plot_depth.R
 # Desc: Plots depth data
 # Date: May 2021
@@ -24,6 +24,7 @@ for (i in 1:length(files)) {
   
   cat("Reading in file...")
   
+
   # Read in file and subset rows containing pressure data
   ts_data_d = fread(file = f)
   this_bird = unique(ts_data_d$TagID)

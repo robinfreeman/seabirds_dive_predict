@@ -44,16 +44,6 @@ for (i in 1:length(files)) {
   # Index
   ts_data$ix = 1:nrow(ts_data)
   this_bird = unique(ts_data$TagID)  # extract bird ID
-  
-  # convert date and time to readable format
-  #cat("\rConverting times to readable format...")
-  #datetime_s = paste(ts_data$Date, ts_data$Time)
-  #ts_data$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%OS", tz = "GMT")
-  
-  # Subset depth data
-  #ts_data_d = ts_data[!is.na(Depth)]
-  #ts_data_d = ts_data_d[Depth<10] # remove erroneous records
-  #this_bird = unique(ts_data_d$TagID)
 
   ################### TRIM DATA BEFORE FIRST DEPARTURE AND AFTER LAST RETURN #######
   ts_data_loc = ts_data[!is.na(`location-lon`)]
@@ -67,10 +57,22 @@ for (i in 1:length(files)) {
   
   # Trim and subset
   ts_data = ts_data[ix > start & ix < finish]
+  ts_data$ix = 1:nrow(ts_data)  # reindex
   ts_data_d = ts_data[!is.na(Depth)]
   ts_data_loc = ts_data[!is.na(`location-lon`)]
   
   # TODO: REINDEX HERE (I.E. START FROM 1 AGAIN)
+  
+  # convert date and time to readable format for smaller dsets
+  cat("\rConverting times to readable format...")
+
+  datetime_s = paste(ts_data_loc$Date, ts_data_loc$Time)
+  ts_data_loc$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S", tz = "GMT")
+  ts_data_loc = ts_data_loc %>% select(-c(Date, Time))  # drop obsolete cols
+  
+  datetime_s = paste(ts_data_d$Date, ts_data_d$Time)
+  ts_data_d$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S", tz = "GMT")
+  ts_data_d = ts_data_d %>% select(-c(Date, Time))  # drop obsolete cols
   
   ################ INTERPOLATE GPS IN DEPTH #####################
   # Note number of GPS rows and their indexes
@@ -143,16 +145,8 @@ for (i in 1:length(files)) {
   ts_data_d$Mean_depth_m[gps_idx] = mean_depth
   #ts_data_d$Dive[gps_idx] = dives # these signify whether a single depth value exceeds threshold in window around GPS record
   
-  
-  
-  ##############################################################################
-  ####################################  GPS  ###################################
-  ##############################################################################
-  
-  # Convert date and time to readable format
-  datetime_s = paste(ts_data_loc$Date, ts_data_loc$Time)
-  ts_data_loc$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%OS", tz = "GMT")
-  
+  ################ GPS STATS #################
+
   cat("\rCalculating distances travelled...")
   
   # Determine nest coordinates (as the most common GPS)
@@ -174,12 +168,6 @@ for (i in 1:length(files)) {
   # Calculate speed
   ts_data_loc$calc_sp_ms = ts_data_loc$dist_moved_m/ts_data_loc$time_diff_s
   
-  ##############################################################################
-  ##############################################################################
-  ##############################################################################
-  
-  
-  
   ################## WRITE FILES ###################
   cat("\rWriting GPS file...")
   fwrite(ts_data_loc, gsub(".csv", "_loc.csv", f)) 
@@ -193,15 +181,9 @@ for (i in 1:length(files)) {
   cat("\rWriting ACC file...")
   fwrite(ts_data %>% select(ix, X, Y, Z, Depth_mod), file = paste0('../Data/BIOT_DGBP/ACC_', this_bird, '.csv'))
   
-  
-  # time span
-  #datetime.rng = paste(ts_data[c(start, finish)]$Date, ts_data[c(start, finish)]$Time)
-  #t.span = as.POSIXct(datetime.rng, format = "%d/%m/%Y %H:%M:%OS", tz = "GMT")
-  
-  # TODO: 
   cat("\rCalculating summary stats...")
   tot_obs = nrow(ts_data)
-  tot_time = as.numeric(ts_data_loc$datetime[nrow(ts_data_loc)]-ts_data_loc$datetime[1])
+  tot_time = as.numeric(ts_data_d$datetime[nrow(ts_data_d)]-ts_data_d$datetime[1])
   tot_dist = sum(ts_data_loc$dist_moved_m)/1000
   max_dist = max(ts_data_loc$dist_to_dg_km, na.rm = TRUE)
   max_depth = max(ts_data_d$Depth)

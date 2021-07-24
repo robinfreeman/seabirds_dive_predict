@@ -31,7 +31,7 @@ def parse_arguments():
     parser.add_argument('-i', dest='indir', type=str,
                     default='../Data/GLS Data 2019 Jan DG RFB Short-term/matched/',
                     help='Path to directory containing the raw data')
-    parser.add_argument('-t', dest='dtype', type=str, choices=['ACC', 'IMM'], required=True,
+    parser.add_argument('-d', dest='dtype', type=str, choices=['ACC', 'IMM'], required=True,
                         help='Data sets to analyse (ACC/IMM).')
     parser.add_argument('-o', dest='out', type=str,
                     default='../Data/Reduced/ACC_reduced_all_dives.csv',
@@ -49,12 +49,13 @@ def parse_arguments():
     parser.set_defaults(reduce=False)
 
     # indir, dtype, outpth, wdw, threshold, res, reduce = ('../Data/BIOT_DGBP/', 'ACC', '../Data/poo.csv', 8, 0.03, 25, True)
+    # indir, dtype, outpth, wdw, threshold, res, reduce = ('../Data/GLS Data 2019 Jan DG RFB Short-term/matched/', 'IMM', '../Data/poo.csv', 120, 0.03, 6, True)
 
     args = parser.parse_args()
 
     print(f'\nPARAMS USED:\n'
           f'indir:\t{args.indir}\n'
-          f'prefix:\t{args.dtype}\n'
+          f'dtype:\t{args.dtype}\n'
           f'out:\t{args.out}\n'
           f'window:\t{args.window}s\n'
           f'thold:\t{args.threshold}\n'
@@ -74,13 +75,20 @@ def main(indir, dtype, outpth, wdw=10, threshold=0.03, res=25, reduce=True):
     if reduce:
         assert not outpth.endswith('/'), "Out path should be to file, not dir"
         if os.path.exists(outpth):
-            print(f'Removing outfile: {outpth}')
-            os.remove(outpth)  # remove file if already exists, otherwise out file will be appended
+            # check if user wishes to remove file at outpth to continue
+            ans = input(f"The file '{outpth}' already exists and must be removed to continue. Rm file? (y/n) ").lower()
+            while ans not in ['y', 'n']:
+                ans = input(f"Type 'y' to remove the file '{outpth}' and continue or 'n' to exit: ").lower()
+            if ans == 'n':
+                sys.exit('\nGoodbye :)')
+            else:
+                print(f'{outpth} removed.\n')
+                os.remove(outpth)  # remove file if already exists, otherwise out file will be appended
 
     # Grab list of relevant file paths
-    # TODO: delete '03_S1_'
     files = glob.glob(f'{indir}{dtype}*.csv')
 
+    # f = glob.glob(f'{indir}GLS_x_Depth*.csv')[0]
     # f = glob.glob(f'{indir}{dtype}*.csv')[2]
 
     t_count = 0
@@ -101,9 +109,9 @@ def main(indir, dtype, outpth, wdw=10, threshold=0.03, res=25, reduce=True):
             arr = dd.read_csv(f).to_dask_array(lengths=True)
             train_data = core.rolling_acceleration_window(arr, wdw, threshold, res)
         else:
-            df = dd.read_csv(f, usecols=['datetime', 'wet/dry', 'Depth_mod'], dtype={'Depth_mod': 'float64'})
+            df = dd.read_csv(f, usecols=['ix', 'wet/dry', 'Depth_mod'], dtype={'Depth_mod': 'float64'})
             conv_nums = {'wet/dry': {'wet': 1, 'dry': 0}}
-            arr = df[['datetime', 'wet/dry', 'Depth_mod']].replace(conv_nums).to_dask_array(lengths=True)
+            arr = df[['ix', 'wet/dry', 'Depth_mod']].replace(conv_nums).to_dask_array(lengths=True)
             train_data = core.rolling_immersion_window(arr, wdw, threshold, res)
 
         bird = re.search(fr"{dtype}_(\w+).csv", f).group(1)  # bird ID from path

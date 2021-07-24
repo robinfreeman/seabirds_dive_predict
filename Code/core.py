@@ -56,11 +56,11 @@ def reduce_dset(data):
     # Stack, shuffle and compute
     data_add = dd.from_dask_array(da.vstack((pos, neg))).compute()
     data_add = data_add.sample(frac=1)
-    data_add.columns = ['IX', *data_add.columns[1:-1], 'Dive']  # rename first and last cols
+    data_add.columns = ['ix', *data_add.columns[1:-1], 'Dive']  # rename first and last cols
 
     # Change dtypes
     data_add.Dive = data_add.Dive.astype(int)
-    data_add.IX = data_add.IX.astype(int)
+    data_add.ix = data_add.ix.astype(int)
 
     #data_add.datetime = pd.to_datetime(data_add.datetime)
 
@@ -142,7 +142,7 @@ def rolling_acceleration_window(arr, wdw, threshold, res=25):
     # assert wdw % res == 0, f'Window size must be divisible by {res} for {res}Hz ACC data'
 
     wdw *= res  # expand resolution to no. of rows
-    time = arr[:-(wdw-1), 0]  # extract time col
+    ix = arr[:-(wdw - 1), 0]  # extract ix col
     arr_tmp = arr[:, 1:].astype(float)
 
     x = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 0], wdw)
@@ -152,10 +152,12 @@ def rolling_acceleration_window(arr, wdw, threshold, res=25):
     d = da.apply_along_axis(check_for_dive, 1, depth, threshold)
 
     # reshape column vectors
-    time = time.reshape((time.shape[0], 1))
-    d = d.reshape((d.shape[0], 1))
+    #ix = ix.reshape((ix.shape[0], 1))
+    #d = d.reshape((d.shape[0], 1))
+    ix = ix.reshape((-1, 1))
+    d = d.reshape((-1, 1))
 
-    train_data = da.hstack((time, x, y, z, d))
+    train_data = da.hstack((ix, x, y, z, d))
 
     train_data.compute_chunk_sizes()
 
@@ -178,20 +180,20 @@ def rolling_immersion_window(arr, wdw, threshold, res=6):
     """
     assert wdw % res == 0, f'Window size must be divisible by {res}'
 
-    time = arr[:-(wdw - 1), 0]  # extract time col
+    ix = arr[:-(wdw - 1), 0].astype(int)   # extract ix col
     arr_tmp = arr[:, 1:].astype(float)
 
     imm = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 0], wdw)
-    imm = da.apply_along_axis(lambda a: a[~da.isnan(a)], 1, imm)
+    imm = da.apply_along_axis(lambda a: a[~da.isnan(a)], 1, imm).astype(int)
 
     depth = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 1], wdw)
     d = da.apply_along_axis(check_for_dive, 1, depth, threshold)
 
     # reshape column vectors
-    time = time.reshape((time.shape[0], 1))
-    d = d.reshape((d.shape[0], 1))
+    ix = ix.reshape((-1, 1))
+    d = d.reshape((-1, 1))
 
-    train_data = da.hstack((time, imm, d))
+    train_data = da.hstack((ix, imm, d))
 
     train_data.compute_chunk_sizes()
 
@@ -287,7 +289,7 @@ def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
 
 
 
-def dask_build_train_evaluate(data, bird, modelpath, y_field='Dive', drop=['BirdID', 'datetime'], epochs=100):
+def dask_build_train_evaluate(data, bird, modelpath, ycol='Dive', drop=['BirdID', 'ix'], epochs=100):
     """
 
     :param to_drop:
@@ -296,26 +298,23 @@ def dask_build_train_evaluate(data, bird, modelpath, y_field='Dive', drop=['Bird
     code_no: code name to go into model name to recognise what it is
     :return:
     """
-    from tensorflow.keras.callbacks import EarlyStopping  #, ModelCheckpoint
+    from tensorflow.keras.callbacks import EarlyStopping
 
     # Split data
     print(f"Withholding bird '{bird}'...")
     train = data[data.BirdID != bird]
     test = data[data.BirdID == bird].compute()
 
-    X_test = test.drop(columns=drop + [y_field]).to_numpy()
+    X_test = test.drop(columns=drop + [ycol]).to_numpy()
     y_test = test.Dive.to_numpy()
 
     model = build_binary_classifier(in_shape=X_test[0].shape)
-
-    #mc = ModelCheckpoint(f'../Results/{codename}_keras/{bird}_best_model.h5', monitor='accuracy', mode='max', verbose=0,
-    #                     save_best_only=True)
 
     # Train
     for i in range(train.npartitions):
 
         train_i = train.get_partition(i).compute()  # getting one partition
-        X_train = train_i.drop(columns=drop + [y_field]).to_numpy()
+        X_train = train_i.drop(columns=drop + [ycol]).to_numpy()
         y_train = train_i.Dive.to_numpy()
 
         es = EarlyStopping(monitor='accuracy', mode='max', verbose=1, patience=15, min_delta=.005)
@@ -336,7 +335,7 @@ def dask_build_train_evaluate(data, bird, modelpath, y_field='Dive', drop=['Bird
     return [bird, *m[1:4], specificity, *conf_matrix]
 
 
-def generate_predictions(modelpath, data, y_field='Dive', drop=['BirdID', 'datetime'], add_ID_col = True):
+def generate_predictions(modelpath, data, ycol='Dive', drop=['BirdID', 'ix'], add_ID_col = True):
     """
 
     :param modelpath:
@@ -353,7 +352,7 @@ def generate_predictions(modelpath, data, y_field='Dive', drop=['BirdID', 'datet
 
     # Split data
     model = keras.models.load_model(modelpath)
-    X_test = data.drop(columns=drop + [y_field]).to_numpy()
+    X_test = data.drop(columns=drop + [ycol]).to_numpy()
     #y_test = data[y_field]
 
     # Calculate optimal threshold
@@ -367,9 +366,9 @@ def generate_predictions(modelpath, data, y_field='Dive', drop=['BirdID', 'datet
     y_pred = (model.predict(X_test) > 0.5).astype(int).flatten()
 
     if add_ID_col:
-        out_df = pd.DataFrame(zip(data.BirdID, data.datetime, y_pred), columns=['BirdID', 'datetime', 'Prediction'])
+        out_df = pd.DataFrame(zip(data.BirdID, data.ix, y_pred), columns=['BirdID', 'ix', 'Prediction'])
     else:
-        out_df = pd.DataFrame(zip(data.datetime, y_pred), columns=['datetime', 'Prediction'])
+        out_df = pd.DataFrame(zip(data.ix, y_pred), columns=['ix', 'Prediction'])
 
     return out_df
 

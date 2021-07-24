@@ -10,7 +10,7 @@ suppressMessages(library(splitstackshape))
 suppressMessages(library(dplyr))
 suppressMessages(library(ggplot2))
 
-# Get all Pressure files (containing Pressure/activity data)
+# Get all GLS files (containing immersion/lux data)
 cat('\nExtracting GLS data...\n\n')
 dir = "../Data/GLS Data 2019 Jan DG RFB Short-term/matched/"
 im_files = list.files(dir, pattern = "T.deg", full.names = TRUE)

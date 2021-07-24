@@ -47,7 +47,7 @@ for (i in 1:nrow(full_dta)){
   gls.f =  gls_files[grepl(gls.id, gls_files, fixed=TRUE)]
   gps.f = dep_files[grepl(gps.id, dep_files, fixed=TRUE)]
   dta.gls = fread(file = gls.f)
-  dta.gps = fread(file = gps.f, select = c("datetime", "Depth", "Depth_mod"))
+  dta.gps = fread(file = gps.f, select = c("ix", "datetime", "Depth", "Depth_mod"))
   #TODO: does this last line need to read milliseconds?
   
   # Merge data
