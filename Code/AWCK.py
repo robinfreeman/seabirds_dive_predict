@@ -29,7 +29,7 @@ def parse_arguments():
     parser.add_argument('-e', dest='epochs', type=int, default=100,
                         help='Max no. of epochs to train each model.')
 
-    # indir, outdir, dtype, ycol, drop, epochs = ('../Data/Reduced/', None, 'IMM', 'Dive', ['BirdID'], 1)
+    # indir, outdir, dtype, ycol, drop, epochs = ('../Data/Reduced/', None, 'IMM', 'Dive', ['BirdID', 'ix'], 1)
 
     args = parser.parse_args()
 
@@ -50,7 +50,7 @@ def main(indir, outdir, dtype, ycol, drop, epochs):
     assert outdir.endswith('/'), 'outdir arg must end with a forward slash'
 
     # DataFrame for out stats
-    metrics = ['Accuracy', 'AUC', 'Sensitivity', 'Specificity',
+    metrics = ['Accuracy', 'AUC', 'Precision', 'Sensitivity', 'Specificity',
                'TruePos (%)', 'FalsePos (%)', 'FalseNeg (%)', 'TrueNeg (%)']
     out_stats = pd.DataFrame(columns=metrics)
 
@@ -83,7 +83,7 @@ def main(indir, outdir, dtype, ycol, drop, epochs):
         Xval_metrics.to_csv(f'{outdir}{dtype}_{wdw}_xval_metrics_keras.csv', header=True, index=False)
 
         # Aggeragate stats
-        mean_stats = Xval_metrics.iloc[:, 1:5].mean(axis=0)
+        mean_stats = Xval_metrics.iloc[:, 1:6].mean(axis=0)
         conf_total = conf_temp.sum(axis=0)
         conf_total = (conf_total / conf_total.sum()) * 100
 

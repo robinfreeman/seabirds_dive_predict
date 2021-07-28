@@ -233,7 +233,7 @@ def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
     # Compile model
     model.compile(optimizer='rmsprop',
                   loss='binary_crossentropy',
-                  metrics=['accuracy', 'AUC', 'Recall',
+                  metrics=['accuracy', 'AUC', 'Precision', 'Recall',
                            'TruePositives', 'FalsePositives',
                            'FalseNegatives', 'TrueNegatives']
                   )
@@ -350,8 +350,7 @@ def build_train_evaluate_dask(data, bird, modelpath, ycol='Dive', drop=['BirdID'
     conf_matrix = np.array(m[-4:])
     specificity = conf_matrix[-1] / conf_matrix[2:].sum()
 
-    return [bird, *m[1:4], specificity, *conf_matrix]
-
+    return [bird, *m[1:5], specificity, *conf_matrix]
 
 def predict_dives(modelpath, data, ycol='Dive', drop=['BirdID', 'ix'], add_ID_col = True):
     """
