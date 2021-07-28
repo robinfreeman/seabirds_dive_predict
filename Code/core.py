@@ -142,7 +142,7 @@ def rolling_acceleration_window(arr, wdw, threshold, res=25):
     # assert wdw % res == 0, f'Window size must be divisible by {res} for {res}Hz ACC data'
 
     wdw *= res  # expand resolution to no. of rows
-    ix = arr[:-(wdw - 1), 0]  # extract ix col
+    ix = arr[:-(wdw - 1), 0].astype(int)  # extract ix col
     arr_tmp = arr[:, 1:].astype(float)
 
     x = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 0], wdw)
@@ -154,7 +154,8 @@ def rolling_acceleration_window(arr, wdw, threshold, res=25):
     # reshape column vectors
     #ix = ix.reshape((ix.shape[0], 1))
     #d = d.reshape((d.shape[0], 1))
-    ix = ix.reshape((-1, 1))
+    shift = round(wdw / 2)
+    ix = ix.reshape((-1, 1)) + shift  # shift each ix to centre of window
     d = d.reshape((-1, 1))
 
     train_data = da.hstack((ix, x, y, z, d))
@@ -188,14 +189,14 @@ def rolling_immersion_window(arr, wdw, threshold, res=6):
     arr_tmp = arr[:, 1:].astype(float)
 
     imm = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 0], wdw)
-    #shift = round(wdw/2)*25  # to shift ix to centre of window (because 25 ix per second)
     imm = da.apply_along_axis(lambda a: a[~da.isnan(a)], 1, imm).astype(int)
 
     depth = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 1], wdw)
     d = da.apply_along_axis(check_for_dive, 1, depth, threshold)
 
     # reshape column vectors
-    ix = ix.reshape((-1, 1))
+    shift = round(wdw / 2) * 25  # to shift ix to centre of window (because 25 ix per second)
+    ix = ix.reshape((-1, 1)) + shift
     d = d.reshape((-1, 1))
 
     train_data = da.hstack((ix, imm, d))
