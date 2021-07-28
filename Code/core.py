@@ -178,12 +178,17 @@ def rolling_immersion_window(arr, wdw, threshold, res=6):
      - Rolling window dask array with each row consisting of immersion vector followed by binary int indicating whether
        or not a dive has occurred within that window.
     """
+
+    # TODO: expand immersion instead to 6s res with max depth value in surrounding +-3s as labels? (saves need to prodcue large IMM dset) na.. more important tigs to spend time on
+    # TODO: put ix at centre of each window
+
     assert wdw % res == 0, f'Window size must be divisible by {res}'
 
-    ix = arr[:-(wdw - 1), 0].astype(int)   # extract ix col
+    ix = arr[:-(wdw - 1), 0].astype(int)  # extract ix col
     arr_tmp = arr[:, 1:].astype(float)
 
     imm = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 0], wdw)
+    #shift = round(wdw/2)*25  # to shift ix to centre of window (because 25 ix per second)
     imm = da.apply_along_axis(lambda a: a[~da.isnan(a)], 1, imm).astype(int)
 
     depth = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 1], wdw)
@@ -213,7 +218,7 @@ def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
     Output:
      - Compiled Tensorflow binary classification model
     """
-    from tensorflow import keras  # internal import to enable multiple threads
+    from tensorflow import keras  # to enable multiple threads
 
     # Build model
     model = keras.models.Sequential([
@@ -286,10 +291,34 @@ def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
 
     return
 """
+def train_classifier_dask(model, data, ycol='Dive', drop=['BirdID', 'ix'], epochs=100):
+    """
+
+    :param data:
+    :param ycol:
+    :param drop:
+    :param epochs:
+    :return:
+    """
+    from tensorflow.keras.callbacks import EarlyStopping  # to enable multiple threads
+
+    for i in range(data.npartitions):
+
+        train_i = data.get_partition(i).compute()  # getting one partition
+        X_train = train_i.drop(columns=drop + [ycol]).to_numpy()
+        y_train = train_i[ycol].to_numpy()
+
+        es = EarlyStopping(monitor='accuracy', mode='max', verbose=1, patience=15, min_delta=.005)
+
+        try:
+            model.fit(X_train, y_train, epochs=epochs, verbose=0, callbacks=[es])
+        except ValueError:
+            continue
+
+    return model
 
 
-
-def dask_build_train_evaluate(data, bird, modelpath, ycol='Dive', drop=['BirdID', 'ix'], epochs=100):
+def build_train_evaluate_dask(data, bird, modelpath, ycol='Dive', drop=['BirdID', 'ix'], epochs=100):
     """
 
     :param to_drop:
@@ -306,23 +335,11 @@ def dask_build_train_evaluate(data, bird, modelpath, ycol='Dive', drop=['BirdID'
     test = data[data.BirdID == bird].compute()
 
     X_test = test.drop(columns=drop + [ycol]).to_numpy()
-    y_test = test.Dive.to_numpy()
+    y_test = test[ycol].to_numpy()
 
+    # Build and train
     model = build_binary_classifier(in_shape=X_test[0].shape)
-
-    # Train
-    for i in range(train.npartitions):
-
-        train_i = train.get_partition(i).compute()  # getting one partition
-        X_train = train_i.drop(columns=drop + [ycol]).to_numpy()
-        y_train = train_i.Dive.to_numpy()
-
-        es = EarlyStopping(monitor='accuracy', mode='max', verbose=1, patience=15, min_delta=.005)
-
-        try:
-            model.fit(X_train, y_train, epochs=epochs, verbose=0, callbacks=[es])
-        except ValueError:
-            continue
+    model = train_classifier_dask(model, train, ycol=ycol, drop=drop, epochs=epochs)
 
     # Save and evaluate
     model.save(modelpath)
@@ -335,7 +352,7 @@ def dask_build_train_evaluate(data, bird, modelpath, ycol='Dive', drop=['BirdID'
     return [bird, *m[1:4], specificity, *conf_matrix]
 
 
-def generate_predictions(modelpath, data, ycol='Dive', drop=['BirdID', 'ix'], add_ID_col = True):
+def predict_dives(modelpath, data, ycol='Dive', drop=['BirdID', 'ix'], add_ID_col = True):
     """
 
     :param modelpath:

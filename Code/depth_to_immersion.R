@@ -54,7 +54,8 @@ for (i in 1:nrow(full_dta)){
   dta_join = left_join(dta.gps, dta.gls, by = "datetime")
   dta_join = dta_join[min(which(!is.na(dta_join$`wet/dry`))):max(which(!is.na(dta_join$`wet/dry`)))]
   
-  fwrite(dta_join, file = paste0(outdir, 'IMM_', gps.id, '_', tolower(gls.id), '.csv'))
+  #fwrite(dta_join, file = paste0(outdir, 'IMM_', gps.id, '_', tolower(gls.id), '.csv'))
+  fwrite(dta_join, file = paste0(outdir, 'IMM_', gps.id,'.csv'))
 }
 
 cat('\nDone!\n')

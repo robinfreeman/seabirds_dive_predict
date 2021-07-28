@@ -29,6 +29,8 @@ def parse_arguments():
     parser.add_argument('-e', dest='epochs', type=int, default=100,
                         help='Max no. of epochs to train each model.')
 
+    # indir, outdir, dtype, ycol, drop, epochs = ('../Data/Reduced/', None, 'IMM', 'Dive', ['BirdID'], 1)
+
     args = parser.parse_args()
 
     print(f'PARAMS USED:\n'
@@ -67,7 +69,7 @@ def main(indir, outdir, dtype, ycol, drop, epochs):
 
         # Train a model for each bird withheld for testing
         with multiprocessing.Pool() as pool:
-            m = pool.starmap(core.dask_build_train_evaluate,
+            m = pool.starmap(core.build_train_evaluate_dask,
                              [(data, bird, f'{outdir}{dtype}_{wdw}_Keras/{bird}_withheld.h5',
                                ycol, drop, epochs) for bird in birds])
 
@@ -89,14 +91,20 @@ def main(indir, outdir, dtype, ycol, drop, epochs):
 
         # Generate predictions
         with multiprocessing.Pool() as pool:
-            preds = pool.starmap(core.generate_predictions, [(f'{outdir}{dtype}_{wdw}_Keras/{bird}_withheld.h5',
+            preds = pool.starmap(core.predict_dives, [(f'{outdir}{dtype}_{wdw}_Keras/{bird}_withheld.h5',
                                                               data[data.BirdID == bird].compute(),
                                                               ycol, drop, True) for bird in birds])
 
         predictions = pd.concat(preds)
         predictions.to_csv(f'{outdir}{dtype}_{wdw}_xval_predictions.csv', header=True, index=False)
 
-    out_stats.sort_index(ascending=True, axis=0, inplace=True)
+        # Train and save full model
+        in_shape = np.zeros(len(set(data.columns) - {ycol, *drop})).shape  # input layer shape for classifier
+        full_model = core.build_binary_classifier(in_shape=in_shape)
+        full_model = core.train_classifier_dask(full_model, data, ycol=ycol, drop=drop, epochs=epochs)
+        full_model.save(f'{outdir}{dtype}_{wdw}_Keras/full_model.h5')
+
+    out_stats = out_stats.sort_index(ascending=True, axis=0)
     out_stats.index.name = 'Window Size (s)'
     out_stats.to_csv(f'../Results/{dtype}_WindowComp_XVal_Metrics_Keras.csv', header=True, index=True)
 
