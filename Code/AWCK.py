@@ -96,6 +96,7 @@ def main(indir, outdir, dtype, ycol, drop, epochs):
                                                               ycol, drop, True) for bird in birds])
 
         predictions = pd.concat(preds)
+        # TODO: Join to original dset?
         predictions.to_csv(f'{outdir}{dtype}_{wdw}_xval_predictions.csv', header=True, index=False)
 
         # Train and save full model

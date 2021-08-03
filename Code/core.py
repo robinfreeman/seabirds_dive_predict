@@ -292,7 +292,7 @@ def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
 
     return
 """
-def train_classifier_dask(model, data, ycol='Dive', drop=['BirdID', 'ix'], epochs=100):
+def train_classifier_dask(model, train_data, ycol='Dive', drop=['BirdID', 'ix'], epochs=100):
     """
 
     :param data:
@@ -303,9 +303,9 @@ def train_classifier_dask(model, data, ycol='Dive', drop=['BirdID', 'ix'], epoch
     """
     from tensorflow.keras.callbacks import EarlyStopping  # to enable multiple threads
 
-    for i in range(data.npartitions):
+    for i in range(train_data.npartitions):
 
-        train_i = data.get_partition(i).compute()  # getting one partition
+        train_i = train_data.get_partition(i).compute()  # getting one partition
         X_train = train_i.drop(columns=drop + [ycol]).to_numpy()
         y_train = train_i[ycol].to_numpy()
 
@@ -337,6 +337,8 @@ def build_train_evaluate_dask(data, bird, modelpath, ycol='Dive', drop=['BirdID'
 
     X_test = test.drop(columns=drop + [ycol]).to_numpy()
     y_test = test[ycol].to_numpy()
+
+    # TODO: split test into test/validation here and pass validation into train_calassifier to allow early_stopping?
 
     # Build and train
     model = build_binary_classifier(in_shape=X_test[0].shape)

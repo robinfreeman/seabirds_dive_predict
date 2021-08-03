@@ -188,8 +188,10 @@ for (i in 1:length(files)) {
   max_dist = max(ts_data_loc$dist_to_dg_km, na.rm = TRUE)
   max_depth = max(ts_data_d$Depth)
   mean_depth = mean(ts_data_d$Depth)
-  div = sum(ts_data_d$Depth_mod>threshold)
-  non_div = nrow(ts_data_d)-div
+  #div = sum(ts_data_d$Depth_mod>threshold)
+  #non_div = nrow(ts_data_d)-div
+  div = sum(deepest>threshold)  # in terms of dive locations instead of individual dives
+  non_div = length(deepest)-div
   
   # Total time
   # Total dist travelled

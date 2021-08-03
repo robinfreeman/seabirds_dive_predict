@@ -23,7 +23,7 @@ do
 done
 
 
-for i in $(seq 120 60 600) 
+for i in $(seq 60 120 1200) 
 do 
 	outpth=../Data/IMM${i}_reduced_all_dives.csv
 	python3 ../Code/write_training_dsets.py -t IMM -o $outpth -w $i --reduce
