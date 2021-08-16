@@ -50,11 +50,25 @@ for (i in 1:nrow(full_dta)){
   dta.gps = fread(file = gps.f, select = c("ix", "datetime", "Depth", "Depth_mod"))
   #TODO: does this last line need to read milliseconds?
   
+  # Expand light level resolution to 1s
+  #strt = min(which(!is.na(dta.gls$`light(lux)`)))
+  #dta.gls = dta.gls[strt:nrow(dta.gls),]  # drop all rows before first light
+  #dta.gls$`light(lux)` = zoo::na.locf(dta.gls$`light(lux)`)
+
   # Merge data
   dta_join = left_join(dta.gps, dta.gls, by = "datetime")
   dta_join = dta_join[min(which(!is.na(dta_join$`wet/dry`))):max(which(!is.na(dta_join$`wet/dry`)))]
   
+  # Reduce depth resolution to 6s
+  imm.ix = which(!is.na(dta_join$`wet/dry`))
+  mid.points = round(zoo::rollmean(imm.ix, 2))
+  wdws = c(1, mid.points, nrow(dta_join))
+  deepest = sapply(1:(length(wdws)-1), function(i) max(dta_join$Depth_mod[wdws[i]:wdws[i+1]]))
+  dta_join = dta_join %>% filter(!is.na(`wet/dry`)) %>% select(-c('Depth'))
+  dta_join$Depth_mod = deepest
+  
   #fwrite(dta_join, file = paste0(outdir, 'IMM_', gps.id, '_', tolower(gls.id), '.csv'))
+  gps.id = paste0(gps.id, '_S1')
   fwrite(dta_join, file = paste0(outdir, 'IMM_', gps.id,'.csv'))
 }
 

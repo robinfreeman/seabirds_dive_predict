@@ -9,9 +9,10 @@ suppressMessages(library(dplyr))
 suppressMessages(library(geosphere))
 suppressMessages(library(sp))
 suppressMessages(library(sf))
+suppressMessages(library(stringr))
 
 ## Global variables
-threshold = 0.03
+threshold = 0.1
 
 chagos = read_sf("../Data/BIOT_DGBP/Chagos_v6_land_simple.shp")
 diego.garcia = st_coordinates(tail(chagos$geometry, 1))[, c('X', 'Y')]
@@ -43,6 +44,7 @@ for (i in 1:length(files)) {
   
   # Index
   ts_data$ix = 1:nrow(ts_data)
+  ts_data$TagID = str_remove(ts_data$TagID, "_gv[0-9]+_?[0-9]+") # reomove GLS tag
   this_bird = unique(ts_data$TagID)  # extract bird ID
 
   ################### TRIM DATA BEFORE FIRST DEPARTURE AND AFTER LAST RETURN #######
@@ -59,16 +61,15 @@ for (i in 1:length(files)) {
   ts_data = ts_data[ix > start & ix < finish]
   ts_data$ix = 1:nrow(ts_data)  # reindex
   ts_data_d = ts_data[!is.na(Depth)]
-  ts_data_loc = ts_data[!is.na(`location-lon`)]
-  
-  # TODO: REINDEX HERE (I.E. START FROM 1 AGAIN)
+  ts_data_d = ts_data_d[Depth<10]  # remove outlier
+  #ts_data_loc = ts_data[!is.na(`location-lon`)]
   
   # convert date and time to readable format for smaller dsets
   cat("\rConverting times to readable format...")
 
-  datetime_s = paste(ts_data_loc$Date, ts_data_loc$Time)
-  ts_data_loc$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S", tz = "GMT")
-  ts_data_loc = ts_data_loc %>% select(-c(Date, Time))  # drop obsolete cols
+  #datetime_s = paste(ts_data_loc$Date, ts_data_loc$Time)
+  #ts_data_loc$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S", tz = "GMT")
+  #ts_data_loc = ts_data_loc %>% select(-c(Date, Time))  # drop obsolete cols
   
   datetime_s = paste(ts_data_d$Date, ts_data_d$Time)
   ts_data_d$datetime = as.POSIXct(datetime_s, format = "%d/%m/%Y %H:%M:%S", tz = "GMT")
@@ -98,6 +99,9 @@ for (i in 1:length(files)) {
   loc_cols_int = zoo::na.approx(loc_data_int[,c("location-lat", "location-lon")])
   # 7 Push back into main df
   ts_data_d[gps_idx, c("location-lat", "location-lon")] = data.frame(loc_cols_int)
+  
+  # Add new rows to GPS
+  ts_data_loc = ts_data_d[!is.na(`location-lon`)]
   
   ######## REMOVE BACKGROUND NOISE ########## 
   
@@ -143,6 +147,9 @@ for (i in 1:length(files)) {
   # Load into new cols
   ts_data_d$Max_depth_m[gps_idx] = deepest
   ts_data_d$Mean_depth_m[gps_idx] = mean_depth
+  ts_data_loc$Max_depth_m = deepest
+  ts_data_loc$Mean_depth_m = mean_depth
+  
   #ts_data_d$Dive[gps_idx] = dives # these signify whether a single depth value exceeds threshold in window around GPS record
   
   ################ GPS STATS #################
@@ -187,7 +194,7 @@ for (i in 1:length(files)) {
   tot_dist = sum(ts_data_loc$dist_moved_m)/1000
   max_dist = max(ts_data_loc$dist_to_dg_km, na.rm = TRUE)
   max_depth = max(ts_data_d$Depth)
-  mean_depth = mean(ts_data_d$Depth)
+  #mean_depth = mean(ts_data_d$Depth)
   #div = sum(ts_data_d$Depth_mod>threshold)
   #non_div = nrow(ts_data_d)-div
   div = sum(deepest>threshold)  # in terms of dive locations instead of individual dives
@@ -198,7 +205,7 @@ for (i in 1:length(files)) {
   # Dives
   
   sum_stats[[this_bird]] = round(c(tot_obs, tot_time, tot_dist, max_dist, 
-                                   max_depth, mean_depth, div, non_div), 2)
+                                   max_depth, div, non_div), 2)
   
   cat("\rDone!\n")
 }
@@ -206,9 +213,9 @@ for (i in 1:length(files)) {
 # Summary stats
 cat("\nWriting summary stats...")
 sumz = as.data.frame(t(data.frame(sum_stats)))
-colnames(sumz) = c('Total observations', 'Time Tracked (days)', 'Total Distance Travelled (km)', 'Max Distance Travelled (km)', 'Max Depth (m)', 
-                   'Mean Depth (m)', 'Dives', 'Non-dives')
-sumz = cbind(BirdID = rownames(sumz), sumz)
+colnames(sumz) = c('Total observations', 'Time Tracked (days)', 'Total Distance Travelled (km)', 
+                   'Max Distance Travelled from Colony (km)', 'Max Depth (m)', 'Dives', 'Non-dives')
+sumz = cbind(TagID = rownames(sumz), sumz)
 write.csv(sumz, file = '../Data/BIOT_DGBP/summary_stats.csv', row.names = FALSE)
 
 # Save all GPS data in one file

@@ -38,7 +38,7 @@ def parse_arguments():
                     help='File/directory path for out file(s).')
     parser.add_argument('-w', dest='window', type=int, default=2,
                     help='Rolling window width.')
-    parser.add_argument('-t', dest='threshold', type=float, default=0.03,
+    parser.add_argument('-t', dest='threshold', type=float, default=0.1,
                     help='Depth threshold for identifying dives.')
     parser.add_argument('-r', dest='res', type=int, default=25,
                     help='Data resolution (Hz for ACC data and seconds between each record for IMM data).')
@@ -49,7 +49,7 @@ def parse_arguments():
     parser.set_defaults(reduce=False)
 
     # indir, dtype, outpth, wdw, threshold, res, reduce = ('../Data/BIOT_DGBP/', 'ACC', '../Data/poo.csv', 8, 0.03, 25, True)
-    # indir, dtype, outpth, wdw, threshold, res, reduce = ('../Data/GLS Data 2019 Jan DG RFB Short-term/matched/', 'IMM', '../Data/poo.csv', 120, 0.03, 6, True)
+    # indir, dtype, outpth, wdw, threshold, res, reduce = ('../Data/GLS Data 2019 Jan DG RFB Short-term/matched/', 'IMM', '../Data/poo.csv', 120, 0.1, 6, True)
 
     args = parser.parse_args()
 
@@ -109,8 +109,10 @@ def main(indir, dtype, outpth, wdw=10, threshold=0.03, res=25, reduce=True):
             arr = dd.read_csv(f).to_dask_array(lengths=True)
             train_data = core.rolling_acceleration_window(arr, wdw, threshold, res)
         else:
+            #df = dd.read_csv(f, usecols=['ix', 'wet/dry', 'light(lux)', 'Depth_mod'], dtype={'Depth_mod': 'float64', 'light(lux)': 'float64'})
             df = dd.read_csv(f, usecols=['ix', 'wet/dry', 'Depth_mod'], dtype={'Depth_mod': 'float64'})
             conv_nums = {'wet/dry': {'wet': 1, 'dry': 0}}
+            #arr = df[['ix', 'wet/dry', 'light(lux)', 'Depth_mod']].replace(conv_nums).to_dask_array(lengths=True)
             arr = df[['ix', 'wet/dry', 'Depth_mod']].replace(conv_nums).to_dask_array(lengths=True)
             train_data = core.rolling_immersion_window(arr, wdw, threshold, res)
 
@@ -120,8 +122,8 @@ def main(indir, dtype, outpth, wdw=10, threshold=0.03, res=25, reduce=True):
             # Reduce dataset
             print('\r\tReducing dset...')
             out_dset = core.reduce_dset(train_data)
-            out_dset['BirdID'] = bird
-            out_dset = out_dset[['BirdID', *out_dset.columns[:-1]]]  # reorder cols
+            out_dset['TagID'] = bird
+            out_dset = out_dset[['TagID', *out_dset.columns[:-1]]]  # reorder cols
             print('\r\tWriting to csv...')
             out_dset.to_csv(outpth, mode='a', header=True if no == 1 else False, index=False)
 

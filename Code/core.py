@@ -185,20 +185,28 @@ def rolling_immersion_window(arr, wdw, threshold, res=6):
 
     assert wdw % res == 0, f'Window size must be divisible by {res}'
 
+    wdw = int(wdw / res)  # expand resolution to no. of rows
     ix = arr[:-(wdw - 1), 0].astype(int)  # extract ix col
     arr_tmp = arr[:, 1:].astype(float)
 
+    # wet/dry
     imm = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 0], wdw)
-    imm = da.apply_along_axis(lambda a: a[~da.isnan(a)], 1, imm).astype(int)
+    #imm = da.apply_along_axis(lambda a: a[~da.isnan(a)], 1, imm).astype(int)
 
-    depth = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 1], wdw)
+    # LUX
+    #lux = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, 1], wdw)
+    #lux = da.apply_along_axis(lambda a: max(a[~da.isnan(a)]), 1, lux).reshape((-1, 1))
+
+    # Depth
+    depth = da.lib.stride_tricks.sliding_window_view(arr_tmp[:, -1], wdw)
     d = da.apply_along_axis(check_for_dive, 1, depth, threshold)
 
     # reshape column vectors
-    shift = round(wdw / 2) * 25  # to shift ix to centre of window (because 25 ix per second)
+    shift = round(wdw / 2) * res * 25  # to shift ix to centre of window (because 25 ix per second)
     ix = ix.reshape((-1, 1)) + shift
     d = d.reshape((-1, 1))
 
+    #train_data = da.hstack((ix, imm, lux, d))
     train_data = da.hstack((ix, imm, d))
 
     train_data.compute_chunk_sizes()
@@ -240,7 +248,7 @@ def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
     return model
 
 
-#def train_classifier(model, train_data, y_field='Dive', epochs=100, drop=['BirdID'], model_checkpoint=None):
+#def train_classifier(model, train_data, y_field='Dive', epochs=100, drop=['TagID'], model_checkpoint=None):
     """
 
     :param to_drop:
@@ -292,7 +300,7 @@ def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
 
     return
 """
-def train_classifier_dask(model, train_data, ycol='Dive', drop=['BirdID', 'ix'], epochs=100):
+def train_classifier_dask(model, train_data, ycol='Dive', drop=['TagID', 'ix'], epochs=50):
     """
 
     :param data:
@@ -301,7 +309,7 @@ def train_classifier_dask(model, train_data, ycol='Dive', drop=['BirdID', 'ix'],
     :param epochs:
     :return:
     """
-    from tensorflow.keras.callbacks import EarlyStopping  # to enable multiple threads
+    #from tensorflow.keras.callbacks import EarlyStopping  # to enable multiple threads
 
     for i in range(train_data.npartitions):
 
@@ -309,17 +317,18 @@ def train_classifier_dask(model, train_data, ycol='Dive', drop=['BirdID', 'ix'],
         X_train = train_i.drop(columns=drop + [ycol]).to_numpy()
         y_train = train_i[ycol].to_numpy()
 
-        es = EarlyStopping(monitor='accuracy', mode='max', verbose=1, patience=15, min_delta=.005)
+        #es = EarlyStopping(monitor='accuracy', mode='max', verbose=1, patience=15, min_delta=.005)
 
         try:
-            model.fit(X_train, y_train, epochs=epochs, verbose=0, callbacks=[es])
+            #model.fit(X_train, y_train, epochs=epochs, verbose=0, callbacks=[es])
+            model.fit(X_train, y_train, epochs=epochs, verbose=0)
         except ValueError:
             continue
 
     return model
 
 
-def build_train_evaluate_dask(data, bird, modelpath, ycol='Dive', drop=['BirdID', 'ix'], epochs=100):
+def build_train_evaluate_dask(data, bird, modelpath, ycol='Dive', drop=['TagID', 'ix'], epochs=100):
     """
 
     :param to_drop:
@@ -332,8 +341,8 @@ def build_train_evaluate_dask(data, bird, modelpath, ycol='Dive', drop=['BirdID'
 
     # Split data
     print(f"Withholding bird '{bird}'...")
-    train = data[data.BirdID != bird]
-    test = data[data.BirdID == bird].compute()
+    train = data[data.TagID != bird]
+    test = data[data.TagID == bird].compute()
 
     X_test = test.drop(columns=drop + [ycol]).to_numpy()
     y_test = test[ycol].to_numpy()
@@ -350,16 +359,16 @@ def build_train_evaluate_dask(data, bird, modelpath, ycol='Dive', drop=['BirdID'
 
     # Calculate extra stats
     conf_matrix = np.array(m[-4:])
-    specificity = conf_matrix[-1] / conf_matrix[2:].sum()
+    specificity = conf_matrix[-1] / (conf_matrix[1] + conf_matrix[-1])
 
     return [bird, *m[1:5], specificity, *conf_matrix]
 
-def predict_dives(modelpath, data, ycol='Dive', drop=['BirdID', 'ix'], add_ID_col = True):
+def predict_dives(modelpath, data, ycol='Dive', drop=['TagID', 'ix'], add_ID_col = True):
     """
 
     :param modelpath:
     :param data:
-    :return: 3 column dataframe BirdID datetime Predictions
+    :return: 3 column dataframe TagID datetime Predictions
 
     - assumes balanced dset
 
@@ -384,8 +393,10 @@ def predict_dives(modelpath, data, ycol='Dive', drop=['BirdID', 'ix'], add_ID_co
     # Calculate predictions
     y_pred = (model.predict(X_test) > 0.5).astype(int).flatten()
 
+    #model.predict_classes(X_test)
+
     if add_ID_col:
-        out_df = pd.DataFrame(zip(data.BirdID, data.ix, y_pred), columns=['BirdID', 'ix', 'Prediction'])
+        out_df = pd.DataFrame(zip(data.TagID, data.ix, y_pred), columns=['TagID', 'ix', 'Prediction'])
     else:
         out_df = pd.DataFrame(zip(data.ix, y_pred), columns=['ix', 'Prediction'])
 
