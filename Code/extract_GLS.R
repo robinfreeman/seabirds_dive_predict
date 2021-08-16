@@ -1,14 +1,13 @@
 # Author: Luke Swaby (lds20@ic.ac.uk)
-# Script: extract_depth.R
-# Desc: Creates csv files containing only those rows of the parent files with depth data
-# Date: Apr 2021
+# Script: extract_GLS.R
+# Desc: Extracts and cleans raw data from Intigeo C330 geolocator
+# Date: Aug 2021
 # TODO: make fread read last line as the transition is important! (just make it dry until the end?)
 
 ## Imports
 suppressMessages(library(data.table))
 suppressMessages(library(splitstackshape))
 suppressMessages(library(dplyr))
-suppressMessages(library(ggplot2))
 
 # Get all GLS files (containing immersion/lux data)
 cat('\nExtracting GLS data...\n\n')
@@ -58,11 +57,4 @@ for (i in 1:length(files)){
   # Combine and save
   comb_data = left_join(expnd_data, lux_data, by = 'datetime')
   fwrite(comb_data, paste0(f, "_GLS.csv"))
-  
-  # Plot light time series
-  g = ggplot(comb_data[!is.na(`light(lux)`)], aes(x = datetime, y = `light(lux)`)) +  
-    geom_line(size=0.2) + xlab("Time") + ylab("Light") +
-    ggtitle("Light Time-Series")
-  
-  ggsave(g, file=paste0('../Plots/', this_bird, "_LUX.png"), width = 9, height = 4.5)
 }

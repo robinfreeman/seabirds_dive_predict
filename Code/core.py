@@ -14,7 +14,6 @@ import pandas as pd
 import dask.array as da
 import dask.dataframe as dd
 #from tensorflow import keras
-from matplotlib import pyplot as plt
 
 
 ## Functions ##
@@ -66,63 +65,6 @@ def reduce_dset(data):
 
     return data_add
 
-"""
-def reduce_dset_dask(data, outfmt):
-
-    assert outfmt in ['dask', 'pandas'], "outfmt must be one of 'dask'/'pandas'"
-
-    # Sample all dives
-    dive_ix = da.where(data[:, -1] == 1)[0].compute()
-    pos = data[dive_ix]
-    n_dive = len(dive_ix)
-
-    # Sample non-dives
-    no_dive_ix = np.setdiff1d(np.arange(data.shape[0]), dive_ix)
-    n_no_dive = random.randint(n_dive, round(n_dive * 1.1))
-    neg = data[da.random.choice(no_dive_ix, n_no_dive, replace=False)]
-
-    ######
-    stacked = da.vstack((pos, neg))
-    data = stacked[:, 1:].astype(float).compute()
-    datetime = pd.to_datetime(dd.from_dask_array(stacked[:, 0]).compute())
-
-    data_add = dd.from_dask_array(stacked).compute()
-    #######
-
-    # Stack, shuffle and compute
-    if compute:
-        data_add = dd.from_dask_array(data_add).compute()
-        data_add = data_add.sample(frac=1)
-        data_add.columns = ['datetime', *data_add.columns[1:-1], 'Dive']  # rename first and last cols
-
-        # Change dtypes
-        data_add.Dive = data_add.Dive.astype(int)
-        data_add.datetime = pd.to_datetime(data_add.datetime)
-
-    else:
-        data_add = dd.from_dask_array(da.vstack((pos, neg)))
-        N = n_dive + n_no_dive
-        data_add['index'] = dd.from_array(np.random.choice(N, N, replace=False))
-        data_add = data_add[['index', *data_add.columns[:-1]]]  # rearrange cols
-
-        data_add.columns = ['Index', 'datetime', *data_add.columns[2:-1], 'Dive']  # rename first and last cols
-
-        # Change dtypes
-        data_add.Dive = data_add.Dive.astype(int)
-        data_add.datetime = dd.to_datetime(data_add.datetime)
-
-        # change dtypes of all numeric columns to float
-        cols = [str(x) for x in data_add.columns if isinstance(x, int)]
-        data_add.columns = data_add.columns.map(str)
-        for col in cols:
-            data_add[col] = data_add[col].astype(float)
-
-        #data_add.loc[:, numcols] = data_add.loc[:, numcols].astype(float)
-
-        #data_add = data_add.set_index('index', sorted=True)
-
-    return data_add
-"""
 
 def rolling_acceleration_window(arr, wdw, threshold, res=25):
     """
@@ -152,8 +94,6 @@ def rolling_acceleration_window(arr, wdw, threshold, res=25):
     d = da.apply_along_axis(check_for_dive, 1, depth, threshold)
 
     # reshape column vectors
-    #ix = ix.reshape((ix.shape[0], 1))
-    #d = d.reshape((d.shape[0], 1))
     shift = round(wdw / 2)
     ix = ix.reshape((-1, 1)) + shift  # shift each ix to centre of window
     d = d.reshape((-1, 1))
@@ -179,10 +119,6 @@ def rolling_immersion_window(arr, wdw, threshold, res=6):
      - Rolling window dask array with each row consisting of immersion vector followed by binary int indicating whether
        or not a dive has occurred within that window.
     """
-
-    # TODO: expand immersion instead to 6s res with max depth value in surrounding +-3s as labels? (saves need to prodcue large IMM dset) na.. more important tigs to spend time on
-    # TODO: put ix at centre of each window
-
     assert wdw % res == 0, f'Window size must be divisible by {res}'
 
     wdw = int(wdw / res)  # expand resolution to no. of rows
@@ -248,66 +184,19 @@ def build_binary_classifier(in_shape, l1_units=200, l2_units=200, dropout=0.2):
     return model
 
 
-#def train_classifier(model, train_data, y_field='Dive', epochs=100, drop=['TagID'], model_checkpoint=None):
-    """
-
-    :param to_drop:
-    :param train_data:
-    :param model_checkpoint:
-    :return:
-    """
-"""
-    print(f'Training on {train_data.npartitions} partitions...')
-
-    for i in range(train_data.npartitions):
-
-        print(f'\n\nPARTITION {i}\n\n')
-
-        train_i = train_data.get_partition(i).compute()  # getting one partition
-        X_train = train_i.drop(columns=drop + [y_field]).to_numpy()
-        y_train = train_i[y_field].to_numpy()
-
-        es = EarlyStopping(monitor='accuracy', mode='max', verbose=1, patience=10, min_delta=.005)
-
-        try:
-            history = model.fit(X_train, y_train, epochs=epochs, verbose=0,
-                                callbacks=[es, model_checkpoint] if model_checkpoint else [es])
-        except ValueError:
-            continue
-
-        #############################################
-        #from matplotlib import pyplot as plt
-        # summarize history for accuracy
-        plt.plot(history.history['accuracy'])
-        #plt.plot(history.history['loss'])
-        #plt.plot(history.history['val_accuracy'])
-        plt.title('model accuracy')
-        plt.ylabel('accuracy')
-        plt.xlabel('epoch')
-        #plt.legend(['train', 'val'], loc='upper left')
-        plt.show()
-        # summarize history for loss
-        
-        plt.plot(history.history['loss'])
-        #plt.plot(history.history['val_loss'])
-        plt.title('model loss')
-        plt.ylabel('loss')
-        plt.xlabel('epoch')
-        #plt.legend(['train', 'val'], loc='upper left')
-        plt.show()
-        #############################################
-    
-
-    return
-"""
 def train_classifier_dask(model, train_data, ycol='Dive', drop=['TagID', 'ix'], epochs=50):
     """
+    Iteratively trains model on partitions of dask dataframe
 
-    :param data:
-    :param ycol:
-    :param drop:
-    :param epochs:
-    :return:
+    Arguments:
+     - model: keras model object
+     - train_data: (dask dataframe) training data
+     - ycol: (str) name of class column
+     - drop: (list) list of additional column names to drop in order to leave only feature columns
+     - epochs: (int) number of epochs to train models for
+
+    Output:
+     - Trained model
     """
     #from tensorflow.keras.callbacks import EarlyStopping  # to enable multiple threads
 
@@ -330,14 +219,21 @@ def train_classifier_dask(model, train_data, ycol='Dive', drop=['TagID', 'ix'], 
 
 def build_train_evaluate_dask(data, bird, modelpath, ycol='Dive', drop=['TagID', 'ix'], epochs=100):
     """
+    Build and trains a keras neural network to predict diving behaviour, then evaluates with data from a withheld bird.
 
-    :param to_drop:
-    :param train_data:
-    :param model_checkpoint:
-    code_no: code name to go into model name to recognise what it is
-    :return:
+    Arguments:
+     - data: (dask dataframe) dataframe containing all features and corresponding classes (dive/non-dive) for all birds
+       in the data set.
+     - bird: (str) Tag ID of bird to withhold for testing
+     - ycol: (str) name of class column
+     - drop: (list) list of additional column names to drop in order to leave only feature columns
+     - epochs: (int) number of epochs to train models for
+
+    Output:
+     - list of classification metrics: ['accuracy', 'AUC', 'Precision', 'Recall', 'Specificity', 'TruePositives',
+       'FalsePositives', 'FalseNegatives', 'TrueNegatives']
     """
-    from tensorflow.keras.callbacks import EarlyStopping
+    #from tensorflow.keras.callbacks import EarlyStopping
 
     # Split data
     print(f"Withholding bird '{bird}'...")
@@ -363,15 +259,20 @@ def build_train_evaluate_dask(data, bird, modelpath, ycol='Dive', drop=['TagID',
 
     return [bird, *m[1:5], specificity, *conf_matrix]
 
+
 def predict_dives(modelpath, data, ycol='Dive', drop=['TagID', 'ix'], add_ID_col = True):
     """
+    Build and trains a keras neural network to predict diving behaviour, then evaluates with data from a withheld bird.
 
-    :param modelpath:
-    :param data:
-    :return: 3 column dataframe TagID datetime Predictions
+    Arguments:
+     - modelpath: (str) path to model for generating predictions
+     - data: (dask dataframe) dataframe containing features to classify
+     - ycol: (str) name of class column
+     - drop: (list) list of additional column names to drop in order to leave only feature columns
+     - add_ID_col: (bool) add Tag ID col to out CSV?
 
-    - assumes balanced dset
-
+    Output:
+     - pandas dataframe containing model predictions and corresponding indicies for georeferencing
     """
     # modelpath = '../Results/Reduced/Keras_ACC_XVal_Results/ACC_2_Keras/ch_gps03_S1_withheld.h5'
 

@@ -1,36 +1,34 @@
 #!/bin/bash
 # Author: Luke Swaby (lds20@ic.ac.uk)
-# Script: run_GPS.sh
-# Desc: Processes and plots GPS data extracted from logger
+# Script: RUN_PROJECT.sh
+# Desc: Runs all code scripts to compile project
 # Arguments: none
-# Date: Apr 2021
-
-Rscript extract_depth.R
+# Date: Aug 2021
 
 Rscript extract_GPS.R
 
-#Rscript plot_depth.R
-
 Rscript extract_GLS.R
 
-Rscript depth_to_immersion.R
+Rscript depth_to_IMM.R
 
 # Create training data sets for deep learning
 for i in $(seq 2 2 10) 
 do 
 	outpth=../Data/ACC${i}_reduced_all_dives.csv
-	python3 ../Code/write_training_dsets.py -t ACC -o $outpth -w $i --reduce
+	python3 write_rolling_dsets.py -d ACC -i ../Data/BIOT_DGBP/ -o $outpth -w $i -r 25 --reduce
 done
 
 
-for i in $(seq 60 120 1200) 
+for i in $(seq 60 120 540) 
 do 
 	outpth=../Data/IMM${i}_reduced_all_dives.csv
-	python3 ../Code/write_training_dsets.py -t IMM -o $outpth -w $i --reduce
+	python3 write_rolling_dsets.py -d IMM -o $outpth -w $i -r 6 --reduce
 done
 
 
-# train models
+# Train models
+python3 build_train_xvalidate_ANN.py -t ACC -i ../Data/ -o ../Results/ -e 50
+python3 build_train_xvalidate_ANN.py -t IMM -i ../Data/ -o ../Results/ -e 50
 
-python3 AWCK.py -i ../Data/ -t ACC
-python3 AWCK.py -i ../Data/ -t ACC
+# Run jupyter notebook to generate plots (requires runipy command line tool)
+runipy plots.ipynb
