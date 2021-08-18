@@ -17,6 +17,11 @@ Results/*
 Plots/*
 !Plots/.gitkeep
 
+## Keep empty Data dir
+Data/*
+!Data/.gitkeep
+!Data/README.md
+
 
 ################## PYTHON ##################
 
