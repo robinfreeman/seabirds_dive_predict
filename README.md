@@ -53,6 +53,32 @@ This directory contains the following folders:
 * **Results**: empty directory for results files to be pushed into.
 * **Plots**: empty directory for plots to be pushed into.
 
+Once data files have been added, the project directory structure should look like this:
+```
+PROJECT
+│   README.md
+│
+└───Data/
+│   │   
+│   └───BIOT_DGBP/
+│   │    │   ...
+│   │    └───BIOT_DGBP/
+│   │         │   ...
+│   │
+│   └─── GLS Data 2019 Jan DG RFB Short-term/
+│        │   ...
+│        └───matched/
+│             │   ...
+└───Code/
+│   │   ...
+│
+└───Results/
+│   │   NA
+│
+└───Plots/
+    │   NA
+```
+
 
 ## Contact
 
