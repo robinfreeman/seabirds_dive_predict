@@ -4,7 +4,7 @@
 # Date: Aug 2021
 # TODO: make fread read last line as the transition is important! (just make it dry until the end?)
 
-suppressMessages(library(data.table))
+suppressPackageStartupMessages(library(data.table))
 suppressMessages(library(dplyr))
 suppressMessages(library(stringr))
 

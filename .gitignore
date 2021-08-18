@@ -4,8 +4,18 @@ Images/
 Receipts/
 Meetings/
 Reading/
+DeepLearning/
+Proposal/
 Rplots.pdf
 .DS_Store
+
+## Keep empty Results and Plots dirs
+Results/*
+!Results/.gitkeep
+
+## Keep empty Results dir
+Plots/*
+!Plots/.gitkeep
 
 
 ################## PYTHON ##################
