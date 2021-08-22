@@ -1,7 +1,7 @@
 # MSc CMEE Summer Research Project
 
 This directory contains code and directory structure for my summer research project in the [MSc Computational Methods in Ecology and Evolution](https://www.imperial.ac.uk/study/pg/life-sciences/computational-methods-ecology-evolution/) course at Imperial College London, titled:
-"*Artificial neural networks to predict foraging behaviour: GLS data can accurately predict diving in pelagic seabirds.*"
+"*Artificial neural networks to predict foraging behaviour: salt-water immersion data can accurately predict diving in seabirds.*"
 
 ## Prerequisites
 
