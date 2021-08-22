@@ -1,9 +1,17 @@
-#!/usr/bin/env Rscript
+# Author: Luke Swaby (lds20@ic.ac.uk)
+# Script: ACC_sumstats.R
+# Desc: Creates labelled rolling window data sets using summary statistics taken from windows
+# of 25Hz z-axis ACC data.
+# Date: Aug 2021
+
+## Imports ##
 
 library(data.table)
 library(stringr)
 
-n = commandArgs(trailingOnly=TRUE)
+## Script ##
+
+wdw = as.numeric(commandArgs(trailingOnly=TRUE))  # take arg from command line
 
 
 if (length(n) != 1) {
@@ -13,8 +21,7 @@ if (length(n) != 1) {
 files = list.files("../Data/BIOT_DGBP/", pattern = "ACC_ch", full.names = TRUE)
 
 threshold = 0.1
-#n = 6000  # no of ACC rows in 4 min   , 1500, 3000
-n = as.numeric(n)
+n = wdw*25*60
 b = 25  # move window by 1s each time
 
 dlist = list()
@@ -41,4 +48,4 @@ for (i in 1:length(files)){
 }
 
 fourminACCtest = rbindlist(dlist)
-fwrite(fourminACCtest, file = paste0('../Data/BIOT_DGBP/ACCTest_', n/(25*60), '_mins.csv'))
+fwrite(fourminACCtest, file = paste0('../Data/BIOT_DGBP/ACCTest_', wdw, '_mins.csv'))

@@ -4,12 +4,12 @@
 # Date: Aug 2021
 
 ## Imports
-suppressMessages(library(data.table))
-suppressMessages(library(dplyr))
-suppressMessages(library(geosphere))
-suppressMessages(library(sp))
-suppressMessages(library(sf))
-suppressMessages(library(stringr))
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(geosphere))
+suppressPackageStartupMessages(library(sp))
+suppressPackageStartupMessages(library(sf))
+suppressPackageStartupMessages(library(stringr))
 
 ## Global variables
 threshold = 0.1

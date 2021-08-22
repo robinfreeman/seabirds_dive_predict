@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
-""" Creates data set from a rolling window of data points (ACC/IMM) with corresponding class labels (dive/non-dive) for
-training an artificial neural network to predict diving behaviour. """
+""" Trains and cross-validates a keras model to predict diving behaviour using summary statistics taken from windows
+    of 25Hz z-axis ACC data. """
 
 __author__ = 'Luke Swaby (lds20@ic.ac.uk)'
 __version__ = '0.0.1'
 
 ## Imports ##
+
 import numpy as np
 import core  # project module
 import pandas as pd
@@ -22,7 +23,7 @@ def parse_arguments():
     description="Script for generating large data set for deep learning "
                 "from rolling window of acceleration values..")
 
-    parser.add_argument('-w', dest='window', type=int, default=2, help='Rolling time window width (rows).')
+    parser.add_argument('-w', dest='window', type=int, default=4, help='Rolling time window width (rows).')
 
     args = parser.parse_args()
 
@@ -34,26 +35,16 @@ def parse_arguments():
 
 def main(wdw):
     """
-    Creates a data set by taking a rolling window of 250 rows of the input
-    arr and horizontally arranging x, y, and z values followed by a binary
-    value indicating whether or not a dive has occured in that window.
+    Trains and cross-validates a keras model to predict diving behaviour using summary statistics taken from windows
+    of 25Hz z-axis ACC data.
 
     Arguments:
-     - indir: (str) path to directory containing raw data
-     - dtype: (str) predictor (ACC/IMM)
-     - outpth: (str) path to directory to write data sets
      - wdw: (int) Rolling time window width (s).
-     - threshold: (float) Depth threshold for identifying dives (m)
-     - res: (int) resolution of predictor
-     - reduce: (bool) reduce data set to balance class distribution?
 
     Output:
-     - if reduce: pandas dataframe containing rolling windows of data points with corresponding class labels
-       else: npy stack containing full rolling window data set
+     - CSVs containing summary statistics for each fold (i.e. withheld bird) of the cross-validation procedure
     """
-    ######## CREATE DATA ##########
-    no = int(wdw/(25*60))
-    acc = pd.read_csv(f'../Data/BIOT_DGBP/ACCTest_{no}_mins.csv')
+    acc = pd.read_csv(f'../Data/BIOT_DGBP/ACCTest_{wdw}_mins.csv')
 
     dlist = []
 
@@ -116,7 +107,7 @@ def main(wdw):
         outdf.loc[bird] = [*m[1:5], specificity, *conf_matrix]
 
     outdf.index.name = 'TagID'
-    outdf.to_csv(f'../Results_ACC_sumstats/meanACCandSAD/{no}_mins_xval.csv', header=True, index=True)
+    outdf.to_csv(f'../Results_ACC_sumstats/meanACCandSAD/{wdw}_mins_xval.csv', header=True, index=True)
 
     return 0
 

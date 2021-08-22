@@ -5,9 +5,9 @@
 # TODO: make fread read last line as the transition is important! (just make it dry until the end?)
 
 ## Imports
-suppressMessages(library(data.table))
-suppressMessages(library(splitstackshape))
-suppressMessages(library(dplyr))
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(splitstackshape))
+suppressPackageStartupMessages(library(dplyr))
 
 # Get all GLS files (containing immersion/lux data)
 cat('\nExtracting GLS data...\n\n')

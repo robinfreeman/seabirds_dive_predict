@@ -5,8 +5,8 @@
 # TODO: make fread read last line as the transition is important! (just make it dry until the end?)
 
 suppressPackageStartupMessages(library(data.table))
-suppressMessages(library(dplyr))
-suppressMessages(library(stringr))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(stringr))
 
 f = '../Data/GLS Data 2019 Jan DG RFB Short-term/gps_birdno.txt'
 id_map = fread(file = f, header = TRUE, fill = TRUE)
