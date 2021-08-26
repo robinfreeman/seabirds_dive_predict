@@ -35,7 +35,7 @@ runipy plots.ipynb
 
 # Additional diluted ACC analysis
 
-for x in 1500 3000 6000
+for x in 1 2 4
 do
 	Rscript --vanilla ACC_sumstats.R $x
 	
