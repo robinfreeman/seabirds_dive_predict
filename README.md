@@ -48,7 +48,7 @@ The following programming languages/applications are used in the project:
 
 This directory contains the following folders:
 * **Data**: empty directory to store contents of data file found at ...
-* **Code**: contains all code scripts for the project. Can be run in full by navigating to the Code/ directory and running `$ sh RUN_PROJECT.sh`. Descriptions of script functionality can be found at the top of each script.
+* **Code**: contains all code scripts for the project. Descriptions of script functionality can be found at the top of each script (or in the help file in the case of Python scripts).
 * **Results**: empty directory for results files to be pushed into.
 * **Plots**: empty directory for plots to be pushed into.
 
@@ -80,7 +80,7 @@ PROJECT
 
 To run the full pipeline, navigate to the `Code/` directory and run the following command:
 ```
-sh RUN_PROJECT.sh
+$ sh RUN_PROJECT.sh
 ```
 
 ## Contact
