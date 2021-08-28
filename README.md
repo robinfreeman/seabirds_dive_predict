@@ -42,7 +42,6 @@ The following programming languages/applications are used in the project:
 * `tensorflow` (2.5.0)
 
 ### Jupyter Notebook
-* Default IPython kernel
 * R kernel (install [here](https://github.com/IRkernel/IRkernel))
 
 ## Structure and Usage
@@ -79,6 +78,10 @@ PROJECT
     │   NA
 ```
 
+To run the full pipeline, navigate to the `Code/` directory and run the following command:
+```
+sh RUN_PROJECT.sh
+```
 
 ## Contact
 
