@@ -1,4 +1,4 @@
-# MSc CMEE Summer Research Project
+# Deep neural networks to predict foraging behaviour: salt-water immersion data can accurately predict diving in seabirds
 
 This directory contains code and directory structure for the research paper "*Deep neural networks to predict foraging behaviour: salt-water immersion data can accurately predict diving in seabirds*." 
 
