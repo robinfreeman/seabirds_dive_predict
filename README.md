@@ -1,7 +1,8 @@
 # MSc CMEE Summer Research Project
 
-This directory contains code and directory structure for Luke Swaby's summer research project in the [MSc Computational Methods in Ecology and Evolution](https://www.imperial.ac.uk/study/pg/life-sciences/computational-methods-ecology-evolution/) course at Imperial College London, titled:
-"*Deep learning to predict foraging behaviour: salt-water immersion data can accurately predict diving in seabirds.*"
+This directory contains code and directory structure for the research paper "*Deep neural networks to predict foraging behaviour: salt-water immersion data can accurately predict diving in seabirds*." 
+
+This originally started as an MRes research project by Luke Swaby's for the [MSc Computational Methods in Ecology and Evolution](https://www.imperial.ac.uk/study/pg/life-sciences/computational-methods-ecology-evolution/) course at Imperial College London
 
 ## Prerequisites
 
