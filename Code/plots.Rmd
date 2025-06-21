@@ -214,8 +214,8 @@ options(repr.plot.width=15, repr.plot.height=10)  # Resize plot
 ```{r}
 # Load cross-validation metrics for different window sizes
 # IMM = immersion; ACC = acceleration
-imm.dta.full = fread('../Results/csv/IMM_WindowComp_XVal_Metrics_Keras.csv')[,1:6] %>% dplyr::filter(`Window Size (s)`<600)
-acc.dta.full = fread('../Results/csv/ACC_WindowComp_XVal_Metrics_Keras.csv')[,1:6] 
+imm.dta.full = fread('../Results/IMM_WindowComp_XVal_Metrics_Keras.csv')[,1:6] %>% dplyr::filter(`Window Size (s)`<600)
+acc.dta.full = fread('../Results/ACC_WindowComp_XVal_Metrics_Keras.csv')[,1:6] 
 ```
 
 ## All Windows
@@ -307,9 +307,9 @@ wdw.imm = 300
 
 # threshold = 0.1
 cols = c('TagID', 'Accuracy', 'AUC', 'Precision', 'Sensitivity', 'Specificity')
-acc = fread(paste0('../Results/csv/ACC_', wdw.acc, '_xval_metrics_keras.csv'), 
+acc = fread(paste0('../Results/ACC_', wdw.acc, '_xval_metrics_keras.csv'), 
             select = cols, stringsAsFactors = TRUE)
-imm = fread(paste0('../Results/csv/IMM_', wdw.imm, '_xval_metrics_keras.csv'),  
+imm = fread(paste0('../Results/IMM_', wdw.imm, '_xval_metrics_keras.csv'),  
             select = cols, stringsAsFactors = TRUE)
 
 # Melt data
@@ -469,7 +469,7 @@ options(repr.plot.width=5, repr.plot.height=5)  # Resize plot
 #        select("TruePos (%)", "FalsePos (%)", "FalseNeg (%)", "TrueNeg (%)")
 
 # threshold = 0.1
-cm = fread('../Results/csv/ACC_WindowComp_XVal_Metrics_Keras.csv') %>% 
+cm = fread('../Results/ACC_WindowComp_XVal_Metrics_Keras.csv') %>% 
         filter(`Window Size (s)` == 2) %>%
         select("TruePos (%)", "FalsePos (%)", "FalseNeg (%)", "TrueNeg (%)")
 
@@ -567,7 +567,7 @@ options(repr.plot.width=10, repr.plot.height=6.5)  # Resize plot
 ```
 
 ```{r}
-res.sum.files = list.files("../Results/csv/", 
+res.sum.files = list.files("../Results/", 
                            pattern = "_WindowComp_XVal_Metrics_Keras.csv", 
                            full.names = TRUE)
 
@@ -820,7 +820,7 @@ options(repr.plot.width=10, repr.plot.height=10)  # Resize plot
 ```
 
 ```{r}
-pred = fread('../Results/csv/IMM_300_xval_predictions.csv')
+pred = fread('../Results/IMM_300_xval_predictions.csv')
 #dta = fread('../Data/Reduced/IMM300_reduced_all_dives.csv')
 dta = fread('../Data/IMM300_reduced_all_dives.csv')
 joint = left_join(dta, pred, by = c("TagID", "ix"))
@@ -1173,7 +1173,7 @@ IMM300 = fread('../Data/IMM300_reduced_all_dives.csv', select = c('TagID', 'ix',
 #IMM300 = fread('../Data/Reduced/IMM300_reduced_all_dives.csv', select = c('TagID', 'ix', 'Dive'))
 
 # Load predicitions
-dive.preds = fread('../Results/csv/IMM_300_xval_predictions.csv', stringsAsFactors = FALSE) 
+dive.preds = fread('../Results/IMM_300_xval_predictions.csv', stringsAsFactors = FALSE) 
 
 # Join
 dives.n.preds = left_join(dive.preds, IMM300, by = c('TagID','ix'))
@@ -1195,7 +1195,7 @@ ACC4 = fread('../Data/ACC4_reduced_all_dives.csv', select = c('TagID', 'ix', 'Di
 ACC4$TagID = str_remove(ACC4$TagID, "_gv[0-9]+_?[0-9]+")
 
 # Load predicitions
-dive.preds = fread('../Results/csv/ACC_4_xval_predictions.csv', stringsAsFactors = FALSE) 
+dive.preds = fread('../Results/ACC_4_xval_predictions.csv', stringsAsFactors = FALSE) 
 dive.preds$TagID = str_remove(dive.preds$TagID, "_gv[0-9]+_?[0-9]+")
 
 # Join
