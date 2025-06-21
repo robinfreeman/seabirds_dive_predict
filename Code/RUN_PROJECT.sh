@@ -31,7 +31,8 @@ python3 build_train_xvalidate_ANN.py -t ACC -i ../Data/ -o ../Results/ -e 50
 python3 build_train_xvalidate_ANN.py -t IMM -i ../Data/ -o ../Results/ -e 50
 
 # Run jupyter notebook to generate plots (requires runipy command line tool)
-runipy plots.ipynb
+#runipy plots.ipynb
+# Replaced with udpated plots.Rmd (run separately)
 
 # Additional diluted ACC analysis
 
