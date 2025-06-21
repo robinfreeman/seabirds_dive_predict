@@ -1,5 +1,5 @@
 #!/bin/bash
-# Author: Luke Swaby (lds20@ic.ac.uk)
+# Author: Robin Freeman (robin.freeman@ioz.ac.uk, Luke Swaby (lds20@ic.ac.uk))
 # Script: RUN_PROJECT.sh
 # Desc: Runs all code scripts to compile project
 # Arguments: none
